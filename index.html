@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#e9e6e1">
+  <title>Sand Art</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="modulepreload" href="src/sim.js">
+  <link rel="modulepreload" href="src/render.js">
+</head>
+<body>
+  <main id="scene">
+    <div id="toy">
+      <div class="post l"></div>
+      <div class="post r"></div>
+      <div class="base"></div>
+      <!-- A real box: the sand sits between two panes, wood all round. -->
+      <div id="frame">
+        <canvas id="sand"></canvas>
+        <canvas id="flow" hidden></canvas>
+        <div class="face front">
+          <div class="glass"></div>
+          <div class="rail top"></div>
+          <div class="rail bottom"></div>
+          <div class="rail left"></div>
+          <div class="rail right"></div>
+          <div class="shade"></div>
+        </div>
+        <div class="face back">
+          <div class="glass"></div>
+          <div class="rail top"></div>
+          <div class="rail bottom"></div>
+          <div class="rail left"></div>
+          <div class="rail right"></div>
+          <div class="shade"></div>
+        </div>
+        <div class="edge top"></div>
+        <div class="edge bottom"></div>
+        <div class="edge left"></div>
+        <div class="edge right"></div>
+      </div>
+      <div class="axle l"></div>
+      <div class="axle r"></div>
+    </div>
+  </main>
+  <p id="hint"></p>
+  <nav id="palettes" aria-label="Sand colours"></nav>
+  <aside id="debug" hidden></aside>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

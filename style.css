@@ -1,0 +1,266 @@
+:root {
+  --bg-1: #f1eee9;
+  --bg-2: #d9d4cc;
+  --ink: #5d574f;
+  --wood: #d8b48b;
+  --b: 40px;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg-1: #2b2a28; --bg-2: #121211; --ink: #a29b90; }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: radial-gradient(120% 90% at 50% 35%, var(--bg-1), var(--bg-2));
+  color: var(--ink);
+  font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#scene { position: fixed; inset: 0; display: grid; place-items: center; cursor: grab; }
+#scene:active { cursor: grabbing; }
+
+#toy {
+  position: relative;
+  width: var(--tw); height: var(--th);
+  margin-top: calc(var(--b) * -0.6);
+  perspective: calc(var(--fh) * 4);
+  perspective-origin: 50% calc(var(--fh) / 2);
+  transform-origin: 50% calc(var(--fh) / 2);
+  /* One shared 3D space for frame, posts and pins, so the frame correctly
+     hides the pins as it swings towards you. */
+  transform-style: preserve-3d;
+}
+
+/* ---------- the frame ----------
+   A real box in 3D: the sand canvas sits mid-depth between two panes; a
+   wooden face (rails + glass) at the front and at the back, and four edges.
+   The back face is turned around, so seen from behind it reads upright and
+   lit from above - no lighting swap needed when the frame rests flipped. */
+#frame {
+  position: absolute;
+  left: var(--side); top: 0;
+  width: var(--fw); height: var(--fh);
+  transform-origin: 50% 50%;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+#sand, #flow {
+  position: absolute;
+  left: var(--b); top: var(--b);
+  width: var(--iw); height: var(--ih);
+  display: block;
+}
+#sand { image-rendering: pixelated; }
+#flow { pointer-events: none; transform: translateZ(1px); }
+#flow[hidden] { display: none; }
+
+.face {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+.face.front { transform: translateZ(calc(var(--depth) / 2)); }
+.face.back  { transform: rotateX(180deg) translateZ(calc(var(--depth) / 2)); }
+
+.edge {
+  position: absolute;
+  pointer-events: none;
+  backface-visibility: hidden;
+}
+.edge.top, .edge.bottom {
+  left: 0; width: var(--fw); height: var(--depth);
+  top: calc((var(--fh) - var(--depth)) / 2);
+  background-image: var(--grain-h), linear-gradient(var(--wood), var(--wood));
+  background-size: 640px 220px, auto;
+}
+.edge.left, .edge.right {
+  top: 0; height: var(--fh); width: var(--depth);
+  left: calc((var(--fw) - var(--depth)) / 2);
+  background-image: var(--grain-v), linear-gradient(var(--wood), var(--wood));
+  background-size: 220px 640px, auto;
+}
+.edge.top    { transform: translateY(calc(var(--fh) / -2)) rotateX(90deg); }
+.edge.bottom { transform: translateY(calc(var(--fh) / 2)) rotateX(-90deg); }
+.edge.left   { transform: translateX(calc(var(--fw) / -2)) rotateY(-90deg); }
+.edge.right  { transform: translateX(calc(var(--fw) / 2)) rotateY(90deg); }
+/* End grain is a little darker, and rounded-over edges catch some light. */
+.edge::after { content: ""; position: absolute; inset: 0; }
+.edge.top::after, .edge.bottom::after {
+  background: linear-gradient(180deg, rgba(255,250,240,.25), rgba(0,0,0,.06) 20%, rgba(0,0,0,.1) 80%, rgba(255,250,240,.2));
+}
+.edge.left::after, .edge.right::after {
+  background: linear-gradient(90deg, rgba(255,250,240,.2), rgba(0,0,0,.12) 20%, rgba(0,0,0,.16) 80%, rgba(255,250,240,.18));
+}
+
+.glass {
+  position: absolute;
+  left: var(--b); top: var(--b); width: var(--iw); height: var(--ih);
+  background:
+    linear-gradient(112deg, transparent 18%, rgba(255,255,255,.13) 24%, rgba(255,255,255,.04) 31%, transparent 33%,
+                    transparent 58%, rgba(255,255,255,.08) 62%, transparent 66%),
+    linear-gradient(180deg, rgba(255,255,255,.06), transparent 40%);
+  box-shadow:
+    inset 0 0 0 1px rgba(0,0,0,.22),
+    inset 0 calc(var(--b) * .18) calc(var(--b) * .3) rgba(60,40,20,.22),
+    inset 0 calc(var(--b) * -.05) calc(var(--b) * .2) rgba(60,40,20,.12);
+}
+.shade {
+  position: absolute; inset: 0;
+  background: #1a120a;
+  opacity: var(--shade, 0);
+}
+
+/* Mitred wooden rails: grain runs along each rail. */
+.rail { position: absolute; }
+.rail.top, .rail.bottom {
+  left: 0; width: 100%; height: var(--b);
+  background-image: var(--grain-h), linear-gradient(var(--wood), var(--wood));
+  background-size: 640px 220px, auto;
+}
+.rail.left, .rail.right {
+  top: 0; height: 100%; width: var(--b);
+  background-image: var(--grain-v), linear-gradient(var(--wood), var(--wood));
+  background-size: 220px 640px, auto;
+}
+.rail.top    { top: 0;    clip-path: polygon(0 0, 100% 0, calc(100% - var(--b)) 100%, var(--b) 100%); }
+.rail.bottom { bottom: 0; clip-path: polygon(var(--b) 0, calc(100% - var(--b)) 0, 100% 100%, 0 100%); }
+.rail.left   { left: 0;   clip-path: polygon(0 0, 100% var(--b), 100% calc(100% - var(--b)), 0 100%); }
+.rail.right  { right: 0;  clip-path: polygon(0 var(--b), 100% 0, 100% 100%, 0 calc(100% - var(--b))); }
+.rail::after { content: ""; position: absolute; inset: 0; }
+.rail.top::after    { background: linear-gradient(180deg, rgba(255,250,240,.35), rgba(255,255,255,0) 30%, rgba(80,50,20,.18)); }
+.rail.bottom::after { background: linear-gradient(180deg, rgba(80,50,20,.25), rgba(0,0,0,0) 40%, rgba(60,35,10,.22)); }
+.rail.left::after   { background: linear-gradient(90deg, rgba(255,250,240,.28), rgba(255,255,255,0) 35%, rgba(80,50,20,.2)); }
+.rail.right::after  { background: linear-gradient(90deg, rgba(80,50,20,.24), rgba(0,0,0,0) 45%, rgba(60,35,10,.2)); }
+
+/* Steel axle pins from each post into the frame's sides: the pivot it flips on. */
+.axle {
+  position: absolute;
+  top: calc(var(--fh) / 2 - var(--postw) * .3);
+  height: calc(var(--postw) * .6);
+  width: calc(var(--side) - var(--postw) / 2 + var(--b) * .12);
+  background: linear-gradient(180deg, #55585c, #d9dcdf 30%, #f6f7f8 42%, #8e9297 75%, #4b4e52);
+  pointer-events: none;
+}
+.axle.l { left: calc(var(--postw) / 2); }
+.axle.r { right: calc(var(--postw) / 2); }
+/* Washer where the pin enters the wood. */
+.axle::after {
+  content: ""; position: absolute; top: 50%;
+  width: calc(var(--postw) * .35); height: calc(var(--postw) * 1.25);
+  translate: 0 -50%;
+  border-radius: 2px;
+  background: linear-gradient(180deg, #6a6d72, #e6e8ea 35%, #a3a7ab 70%, #505357);
+}
+.axle.l::after { right: calc(var(--b) * .12); }
+.axle.r::after { left: calc(var(--b) * .12); }
+
+/* ---------- stand ---------- */
+.post {
+  position: absolute;
+  top: calc(var(--fh) * .32);
+  width: var(--postw);
+  height: calc(var(--fh) * .68 + var(--gap) + var(--baseh) * .3);
+  border-radius: calc(var(--postw) / 2) calc(var(--postw) / 2) 0 0;
+  background: linear-gradient(90deg, #5f6267, #c7cacd 22%, #f4f6f7 34%, #9a9ea3 58%, #c5c8cc 78%, #54575b);
+  box-shadow: 0 0 calc(var(--b) * .2) rgba(0,0,0,.18);
+}
+.post.l { left: 0; }
+.post.r { right: 0; }
+.post::before {
+  content: ""; position: absolute;
+  top: calc(var(--fh) * .18 - var(--postw) * .6);
+  left: 50%;
+  width: calc(var(--postw) * 1.2); height: calc(var(--postw) * 1.2);
+  translate: -50% 0;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #fff, #a5a9ad 55%, #55585c);
+}
+.base {
+  position: absolute;
+  left: calc(var(--side) * -0.4);
+  right: calc(var(--side) * -0.4);
+  top: calc(var(--fh) + var(--gap));
+  height: var(--baseh);
+  border-radius: calc(var(--b) * .08);
+  background-image:
+    linear-gradient(180deg, rgba(255,250,240,.45), rgba(255,255,255,.08) 22%, rgba(255,255,255,0) 30%, rgba(70,45,20,.22)),
+    var(--grain-h), linear-gradient(var(--wood), var(--wood));
+  background-size: auto, 640px 220px, auto;
+  box-shadow: 0 calc(var(--b) * .35) calc(var(--b) * .6) rgba(30,20,10,.3);
+}
+
+/* ---------- chrome ---------- */
+#palettes {
+  position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom));
+  translate: -50% 0;
+  display: flex; gap: 12px;
+  padding: 8px;
+}
+#palettes button {
+  width: 22px; height: 22px; padding: 0;
+  border: 0; border-radius: 50%;
+  cursor: pointer;
+  background: var(--sw);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.15), 0 1px 3px rgba(0,0,0,.2);
+  transition: transform .15s, box-shadow .15s;
+}
+#palettes button:hover { transform: scale(1.12); }
+#palettes button[aria-pressed="true"] {
+  box-shadow: 0 0 0 2px var(--bg-1), 0 0 0 3.5px var(--ink);
+}
+#palettes button:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
+
+#hint {
+  position: fixed; left: 0; right: 0; bottom: max(62px, calc(env(safe-area-inset-bottom) + 44px));
+  margin: 0; text-align: center;
+  letter-spacing: .02em;
+  opacity: .8;
+  transition: opacity 1.2s;
+  pointer-events: none;
+}
+#hint.gone { opacity: 0; }
+
+/* ---------- tuning panel (D) ---------- */
+#debug {
+  position: fixed; top: 10px; right: 10px; z-index: 10;
+  width: 300px; max-height: calc(100vh - 20px); overflow: auto;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(20, 20, 22, .86);
+  color: #e6e6e6;
+  font: 12px/1.35 ui-sans-serif, system-ui, -apple-system, sans-serif;
+  box-shadow: 0 6px 24px rgba(0,0,0,.35);
+  backdrop-filter: blur(6px);
+  user-select: none;
+}
+#debug[hidden] { display: none; }
+#debug header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+#debug .hint { color: #8d8d92; font-size: 10.5px; }
+#debug .stats {
+  margin: 8px 0; white-space: pre-wrap;
+  font: 10.5px/1.4 ui-monospace, Menlo, monospace; color: #a8e0b4;
+}
+#debug .toggles { display: flex; gap: 14px; margin-bottom: 6px; }
+#debug details { border-top: 1px solid rgba(255,255,255,.1); padding: 6px 0 2px; }
+#debug summary { cursor: pointer; font-weight: 600; color: #fff; padding: 2px 0 4px; }
+#debug .row {
+  display: grid; grid-template-columns: 1fr auto; column-gap: 8px;
+  padding: 3px 0;
+}
+#debug .row label { color: #c9c9ce; cursor: default; }
+#debug .row output { font: 11px ui-monospace, Menlo, monospace; color: #fff; }
+#debug .row input { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: #ff4f8b; }
+#debug .row.changed label { color: #ffb3cd; }
+#debug .row.changed label::after { content: " •"; color: #ff4f8b; }
+#debug footer { display: flex; gap: 6px; margin-top: 8px; border-top: 1px solid rgba(255,255,255,.1); padding-top: 8px; }
+#debug button {
+  flex: 1; padding: 5px 6px;
+  border: 1px solid rgba(255,255,255,.18); border-radius: 5px;
+  background: rgba(255,255,255,.06); color: #eee; font: inherit; cursor: pointer;
+}
+#debug button:hover { background: rgba(255,255,255,.14); }
