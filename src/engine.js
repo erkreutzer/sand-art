@@ -8,6 +8,11 @@ import { seed, seedParams } from './seed.js';
 const MAX_TICKS = 8;           // per frame, at normal speed
 const BUDGET_MS = 11;          // run fewer ticks (slow motion) rather than drop frames
 
+// Everything (sinking, pouring, bubbles, liquid) plays at this fraction of the
+// speeds tuned in sim.js and fluid.js. At 1 it looks sped up; 0.3 is about the
+// pace of a real sand picture.
+export const engineParams = { timeScale: 0.3 };
+
 export class Engine {
   constructor(canvas, w, h, scale, tps) {
     // Liquid cells span 8x8 sim cells (16x16 on huge grids): fine enough for
@@ -17,7 +22,7 @@ export class Engine {
     this.sim.setTickRate(tps);
     this.tps = tps;
     this.renderer = new Renderer(canvas, this.sim, scale);
-    this.acc = 0; this.perTick = 0; this.frameNo = 0; this.timeScale = 1;
+    this.acc = 0; this.perTick = 0; this.frameNo = 0;
     this.lastGA = NaN; this.lastGM = NaN;
     this.reseed();
   }
@@ -37,7 +42,7 @@ export class Engine {
     Object.assign(fluidParams, t.fluid || {});
     Object.assign(seedParams, t.seed || {});
     if (t.render) { Object.assign(renderParams, t.render); this.renderer.applyLiquid(); this.redraw = true; }
-    if (t.engine?.timeScale) this.timeScale = t.engine.timeScale;
+    Object.assign(engineParams, t.engine || {});
     this.sim.wakeAll();
   }
 
@@ -48,8 +53,9 @@ export class Engine {
       sim.wakeAll(); this.lastGA = ga; this.lastGM = gm;
     }
 
-    this.acc += dt * this.tps * this.timeScale;
-    const cap = Math.ceil(MAX_TICKS * this.timeScale);
+    const { timeScale } = engineParams;
+    this.acc += dt * this.tps * timeScale;
+    const cap = Math.ceil(MAX_TICKS * timeScale);
     const budget = this.perTick > 0 ? Math.max(1, Math.floor(BUDGET_MS / this.perTick)) : cap;
     let n = paused ? 0 : Math.min(cap, budget, Math.floor(this.acc));
     this.acc -= Math.floor(this.acc);

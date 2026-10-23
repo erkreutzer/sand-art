@@ -5,8 +5,7 @@ import { params } from './sim.js';
 import { fluidParams } from './fluid.js';
 import { seedParams } from './seed.js';
 import { renderParams } from './render.js';
-
-const engineParams = { timeScale: 1 };
+import { engineParams } from './engine.js';
 
 // [key, label, min, max, step | 'log']
 const GROUPS = [

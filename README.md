@@ -34,6 +34,6 @@ Then open http://localhost:5178.
 
 ## Tuning
 
-Press **D** for the tuning panel. Sliders change grain, air and liquid physics live; double-click a label to reset that one setting. Tweaks are saved in this browser until you press **Reset all**, and **Copy settings** puts them on the clipboard as JSON. To make them permanent, put the values in `params` (`src/sim.js`), `fluidParams` (`src/fluid.js`) or `seedParams` (`src/seed.js`).
+Press **D** for the tuning panel. Sliders change grain, air and liquid physics live; double-click a label to reset that one setting. Tweaks are saved in this browser until you press **Reset all**, and **Copy settings** puts them on the clipboard as JSON. To make them permanent, put the values in `params` (`src/sim.js`), `fluidParams` (`src/fluid.js`), `seedParams` (`src/seed.js`) or `engineParams` (`src/engine.js`, which holds the overall speed).
 
 From the console the same settings are available as `sand.tune({ fluid: { vorticity: 0.5 } })`. Load with `?main` to run everything on the main thread, where `sand.engine` gives direct access.
