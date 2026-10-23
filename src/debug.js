@@ -77,7 +77,8 @@ export function createDebug({ host, reseed }) {
 
   const panel = document.getElementById('debug');
   panel.innerHTML = `
-    <header><strong>Tuning</strong><span class="hint">D to close · double-click a label to reset it</span></header>
+    <header><strong>Tuning</strong><span class="hint">D or three-finger tap to toggle · double-click a label to reset it</span>
+      <button class="close" data-a="close" title="Close" aria-label="Close">✕</button></header>
     <pre class="stats"></pre>
     <div class="toggles">
       <label><input type="checkbox" data-t="flow"> Show flow</label>
@@ -136,6 +137,7 @@ export function createDebug({ host, reseed }) {
     flowCanvas.hidden = !state.flow;
   });
   panel.querySelector('[data-t=pause]').addEventListener('change', (e) => { state.paused = e.target.checked; });
+  panel.querySelector('[data-a=close]').addEventListener('click', () => toggle(false));
   panel.querySelector('[data-a=seed]').addEventListener('click', reseed);
   panel.querySelector('[data-a=reset]').addEventListener('click', () => {
     overrides = {};
@@ -182,14 +184,16 @@ export function createDebug({ host, reseed }) {
     g.stroke();
   }
 
+  function toggle(open = panel.hidden) {
+    panel.hidden = !open;
+    flowCanvas.hidden = panel.hidden || !state.flow;
+  }
+
   return {
     get open() { return !panel.hidden; },
     get wantFlow() { return !panel.hidden && state.flow; },
     get paused() { return state.paused; },
-    toggle() {
-      panel.hidden = !panel.hidden;
-      flowCanvas.hidden = panel.hidden || !state.flow;
-    },
+    toggle,
     update(s, extra) {
       if (panel.hidden || !s) return;
       statsEl.textContent =

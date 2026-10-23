@@ -188,8 +188,21 @@ function frameCenter() {
   const r = toy.getBoundingClientRect();
   return { x: r.left + r.width / 2, y: r.top + (L.fh / 2) };
 }
+// A second finger cancels the flip or drag; a third toggles the tuning panel.
+// Nothing else happens until every finger has lifted.
+const fingers = new Set();
+let multi = false;
 scene.addEventListener('pointerdown', (e) => {
   scene.setPointerCapture(e.pointerId);
+  fingers.add(e.pointerId);
+  if (fingers.size > 1) {
+    if (drag?.mode === 'flip') animateTo(Math.round(theta / 180) * 180, 300);
+    drag = null;
+    multi = true;
+    if (fingers.size === 3) debug.toggle();
+    return;
+  }
+  if (multi) return;
   const c = frameCenter();
   drag = {
     id: e.pointerId, x0: e.clientX, y0: e.clientY, mode: null,
@@ -218,6 +231,8 @@ scene.addEventListener('pointermove', (e) => {
   }
 });
 function endDrag(e) {
+  fingers.delete(e.pointerId);
+  if (!fingers.size) multi = false;
   if (!drag || e.pointerId !== drag.id) return;
   if (!drag.mode) flip();
   else if (drag.mode === 'flip') {
@@ -264,6 +279,10 @@ if (coarse) addEventListener('click', enableMotion, { once: true });
 
 // ---------- hint ----------
 hint.textContent = coarse ? 'Tap to flip · drag to turn · tilt to pour' : 'Click to flip · drag to turn';
+// ?hint forgets that the hint was dismissed, as on a first visit.
+if (query.has('hint')) {
+  try { localStorage.removeItem('sand.hinted'); } catch {}
+}
 let hintShown = !store.get('sand.hinted');
 if (!hintShown) hint.classList.add('gone');
 function dismissHint() {
@@ -314,6 +333,8 @@ function loop(now) {
 // New sand always starts at the top as you see it, whichever way up the frame is.
 function reseed() { host.seed(Math.cos((theta * Math.PI) / 180) < 0); }
 const debug = createDebug({ host, reseed });
+if (query.has('debug')) debug.toggle();
+$('#settings').addEventListener('click', () => debug.toggle(true));
 setPalette(palIndex);
 requestAnimationFrame(loop);
 

@@ -20,7 +20,9 @@ Then open http://localhost:5178.
 | Tilt a phone or tablet | Moves the sand (motion permission is requested on the first tap) |
 | Swatches, 1–7, P | Sand colours |
 | R | New sand |
-| D | Tuning panel: live sliders for every physics setting, a flow-field overlay, stats |
+| D, three-finger tap, ⚙ button | Tuning panel: live sliders for every physics setting, a flow-field overlay, stats |
+| `?debug` | Opens the tuning panel on load |
+| `?hint` | Forgets that the hint was dismissed, so it shows again as on a first visit |
 
 ## How it works
 
