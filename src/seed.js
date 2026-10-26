@@ -8,14 +8,14 @@ export const seedParams = {
   air: 0.005,         // air, as a fraction of the glass height
 };
 
-// upsideDown: the frame is resting flipped, so "top as you see it" is the
-// grid's last row.
-export function seed(sim, upsideDown = false) {
+// rng: seeded random numbers (src/rng.js). upsideDown: the frame is resting
+// flipped, so "top as you see it" is the grid's last row.
+export function seed(sim, rng, upsideDown = false) {
   const { w, h } = sim;
   const put = upsideDown ? (x, y, t, s) => sim.set(x, h - 1 - y, t, s) : (x, y, t, s) => sim.set(x, y, t, s);
   const k = h / 581;                // features are tuned in cells at this size
   sim.reset();
-  const R = Math.random;
+  const R = rng;
   const nCols = 6;
 
   // Underside of the hanging sand: the last picture's mountains, upside down.

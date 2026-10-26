@@ -61,7 +61,8 @@ function deepAir(cells, i, down, depth) {
 }
 
 export class Sim {
-  constructor(w, h, fluid) {
+  // rng: seed-time random numbers (src/rng.js); the tick loop's xorshift starts from one.
+  constructor(w, h, fluid, rng) {
     this.w = w; this.h = h;
     this.fluid = fluid;
     const W = this.W = w + 2, H = this.H = h + 2;
@@ -74,7 +75,7 @@ export class Sim {
     this.airIn = new Uint8Array(this.cw * this.ch);   // chunks the sand pass saw air in
     this.colCount = new Int32Array(fluid.nx);
     this.tick = 0;
-    this.seed = (Math.random() * 0xffffffff) >>> 0 || 1;
+    this.seed = (rng() * 0xffffffff) >>> 0 || 1;
     this.moves = 0;
     this.dirtyMin = 0; this.dirtyMax = H - 1;
     this.off = Int32Array.from([1, W + 1, W, W - 1, -1, -W - 1, -W, -W + 1]);

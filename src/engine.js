@@ -4,6 +4,7 @@ import { Sim, params } from './sim.js';
 import { Fluid, fluidParams } from './fluid.js';
 import { Renderer, renderParams } from './render.js';
 import { seed, seedParams } from './seed.js';
+import { mulberry32, randomSeed } from './rng.js';
 
 const MAX_TICKS = 8;           // per frame, at normal speed
 const BUDGET_MS = 11;          // run fewer ticks (slow motion) rather than drop frames
@@ -14,11 +15,13 @@ const BUDGET_MS = 11;          // run fewer ticks (slow motion) rather than drop
 export const engineParams = { timeScale: 0.3 };
 
 export class Engine {
-  constructor(canvas, w, h, scale, tps) {
+  // seedNo: the same number always gives the same pictures; by default a new one each time.
+  constructor(canvas, w, h, scale, tps, seedNo = randomSeed()) {
+    this.rng = mulberry32(seedNo);
     // Liquid cells span 8x8 sim cells (16x16 on huge grids): fine enough for
     // a curtain of sand to roll up into eddies.
     this.fluid = new Fluid(w + 2, h + 2, Math.max(w, h) > 1600 ? 4 : 3);
-    this.sim = new Sim(w, h, this.fluid);
+    this.sim = new Sim(w, h, this.fluid, this.rng);
     this.sim.setTickRate(tps);
     this.tps = tps;
     this.renderer = new Renderer(canvas, this.sim, scale);
@@ -28,7 +31,7 @@ export class Engine {
   }
 
   reseed(upsideDown = false) {
-    seed(this.sim, upsideDown);
+    seed(this.sim, this.rng, upsideDown);
     this.fluid.reset();
     this.sim.updateSolids(0, this.fluid.ny);
     this.redraw = true;
