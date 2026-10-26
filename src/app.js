@@ -75,8 +75,7 @@ document.documentElement.style.setProperty('--grain-v', grainV);
 let palIndex = Math.min(palettes.length - 1, Math.max(0, +(store.get('sand.palette') ?? 0) || 0));
 
 async function startEngine() {
-  // ?core=wasm runs the Rust core (core/) instead of the JS physics.
-  const init = { w: gw, h: gh, scale, tps: TICKS_PER_SEC, palette: palettes[palIndex], core: query.get('core') === 'wasm' ? 'wasm' : 'js' };
+  const init = { w: gw, h: gh, scale, tps: TICKS_PER_SEC, palette: palettes[palIndex] };
   if (canvas.transferControlToOffscreen && !query.has('main')) {
     let worker;
     try {
@@ -96,7 +95,7 @@ async function startEngine() {
     canvas = fresh;
   }
   const { Engine } = await import('./engine.js');
-  const engine = await Engine.create(canvas, gw, gh, scale, TICKS_PER_SEC, init.core);
+  const engine = await Engine.create(canvas, gw, gh, scale, TICKS_PER_SEC);
   engine.setPalette(init.palette);
   return {
     kind: 'main thread', engine, stats: null,
@@ -333,7 +332,7 @@ function loop(now) {
 
 // New sand always starts at the top as you see it, whichever way up the frame is.
 function reseed() { host.seed(Math.cos((theta * Math.PI) / 180) < 0); }
-const debug = createDebug({ host, reseed });
+const debug = await createDebug({ host, reseed });
 if (query.has('debug')) debug.toggle();
 $('#settings').addEventListener('click', () => debug.toggle(true));
 setPalette(palIndex);

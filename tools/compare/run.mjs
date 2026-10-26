@@ -8,11 +8,13 @@
 // --tune: settings in the debug panel's "Copy settings" shape, applied to both
 // versions before a new starting picture is drawn.
 //
-// A version is "." (this working tree's src/), any git ref, or "rust" (this
-// working tree's core/, built for wasm); defaults HEAD and ".".
+// A version is "." (this working tree's core/, built for wasm; "rust" is the
+// same) or any git ref: the JS physics for refs from before it was deleted
+// (they have src/sim.js), else that ref's committed src/sand_core.wasm.
+// Defaults HEAD and ".".
 import { Worker } from 'node:worker_threads';
 import { execSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, cpSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir, homedir } from 'node:os';
 import { join, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,31 +32,35 @@ const snapAt = [150];
 const tuneArg = opt('tune', null);
 const tune = tuneArg && JSON.parse(tuneArg.trim().startsWith('{') ? tuneArg : readFileSync(tuneArg, 'utf8'));
 
-// Each version gets its own copy of src/, marked as ES modules.
+// Each git ref gets its own copy of src/, marked as ES modules.
+const local = (s) => s === '.' || s === 'rust';
 const tmp = mkdtempSync(join(tmpdir(), 'sand-compare-'));
-const names = specs.map((s) => (s === '.' ? 'working tree' : s === 'rust' ? 'rust core'
+const names = specs.map((s) => (local(s) ? 'working tree'
   : execSync(`git rev-parse --short ${s}`, { cwd: root }).toString().trim()));
 const dirs = specs.map((s, k) => {
+  if (local(s)) return null;
   const d = join(tmp, String(k));
   mkdirSync(d);
-  if (s === '.' || s === 'rust') cpSync(join(root, 'src'), d, { recursive: true });
-  else execSync(`git archive ${s} src | tar -x -C ${d} --strip-components 1`, { cwd: root });
+  execSync(`git archive ${s} src | tar -x -C ${d} --strip-components 1`, { cwd: root });
   writeFileSync(join(d, 'package.json'), '{"type":"module"}');
   return d;
 });
 
 // The core gets the web app's tick rate; its timing and physics are its own.
-let wasm = null;
-if (specs.includes('rust')) {
+let built = null;
+if (specs.some(local)) {
   const cargo = existsSync(join(homedir(), '.cargo/bin/cargo')) ? join(homedir(), '.cargo/bin/cargo') : 'cargo';
   execSync(`${cargo} build --release --quiet --target wasm32-unknown-unknown`, { cwd: join(root, 'core'), stdio: 'inherit' });
-  wasm = join(root, 'core/target/wasm32-unknown-unknown/release/sand_core.wasm');
+  built = join(root, 'core/target/wasm32-unknown-unknown/release/sand_core.wasm');
+  if (!readFileSync(built).equals(readFileSync(join(root, 'src/sand_core.wasm'))))
+    console.log('note: src/sand_core.wasm is not this core/ (run tools/build-core.sh)');
 }
+const wasms = specs.map((s, k) => (local(s) ? built : existsSync(join(dirs[k], 'sim.js')) ? null : join(dirs[k], 'sand_core.wasm')));
 const tps = +readFileSync(join(root, 'src/app.js'), 'utf8').match(/const TICKS_PER_SEC = (\d+)/)[1];
 
 const t0 = Date.now();
 const run = (k, seedNo) => new Promise((resolve, reject) => {
-  const job = { dir: dirs[k], wasm: specs[k] === 'rust' ? wasm : null, tps, seedNo, w, h, fresh, hold, fps, snapAt, tune };
+  const job = { dir: dirs[k], wasm: wasms[k], tps, seedNo, w, h, fresh, hold, fps, snapAt, tune };
   const wk = new Worker(join(here, 'job.mjs'), { workerData: job });
   wk.once('message', resolve); wk.once('error', reject);
 });

@@ -1,25 +1,22 @@
-// Host for the simulation core: picks the JS or the wasm core, keeps the
-// per-tick time budget, and draws. Runs inside the worker, or on the main
-// thread as a fallback where OffscreenCanvas/WebGL2 isn't available.
+// Host for the simulation core (core/, as wasm): keeps the per-tick time
+// budget, and draws. Runs inside the worker, or on the main thread as a
+// fallback where OffscreenCanvas/WebGL2 isn't available.
 import { Renderer, renderParams } from './render.js';
-import { randomSeed } from './rng.js';
+import { loadWasmCore } from './core-wasm.js';
 
 const BUDGET_MS = 11;          // run fewer ticks (slow motion) rather than drop frames
 const NO_LIMIT = 0xffffffff;
+const randomSeed = () => (Math.random() * 4294967296) >>> 0;
 
 export class Engine {
-  // core: 'js' or 'wasm'. seedNo: the same number always gives the same
-  // pictures; by default a new one each time.
-  static async create(canvas, w, h, scale, tps, core = 'js', seedNo = randomSeed()) {
-    const c = core === 'wasm'
-      ? await (await import('./core-wasm.js')).loadWasmCore(w, h, tps, seedNo)
-      : new (await import('./core-js.js')).JsCore(w, h, tps, seedNo);
-    return new Engine(canvas, c, core, scale);
+  // seedNo: the same number always gives the same pictures; by default a new
+  // one each time.
+  static async create(canvas, w, h, scale, tps, seedNo = randomSeed()) {
+    return new Engine(canvas, await loadWasmCore(w, h, tps, seedNo), scale);
   }
 
-  constructor(canvas, core, kind, scale) {
+  constructor(canvas, core, scale) {
     this.core = core;
-    this.kind = kind;
     this.renderer = new Renderer(canvas, core, scale);
     this.perTick = 0;
     this.redraw = true;
@@ -53,7 +50,7 @@ export class Engine {
       this.renderer.draw(glint);
       this.redraw = false;
     }
-    const stats = { core: this.kind, ticks: s.ticks, coreMs: ms, simMs: s.simMs, fluidMs: s.fluidMs, moves: s.moves, w: core.w, h: core.h };
+    const stats = { ticks: s.ticks, coreMs: ms, moves: s.moves, w: core.w, h: core.h };
     if (wantFlow) {
       const { u, v, solid, nx, ny, fs } = core.flow();
       stats.flow = { u: u.slice(), v: v.slice(), solid: solid.slice(), nx, ny, fs, W: core.W, H: core.H };

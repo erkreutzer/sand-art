@@ -18,14 +18,14 @@ web/             today's index.html, style.css, src/ (app, render, worker, debug
 apple/
   SandKit/       Swift package: core bridge, Metal grid→colour kernel, gravity, palettes
   SandArt        one multiplatform Xcode project: iOS + visionOS targets
-tools/compare/   headless scenario runner: JS reference vs Rust core
+tools/compare/   headless scenario runner: any two versions (git refs: JS physics before 1c, wasm after)
 ```
 
 **Why Rust:** clean targets for both wasm (wasm-bindgen) and a static library for Swift; the sim is packed-integer arrays and tight loops, so it ports almost line for line. Rejected: keeping JS on Apple (an app's embedded JavaScriptCore has no JIT, so it's far too slow), a web view on visionOS (no RealityKit glass), Swift→wasm (less mature toolchain).
 
 **Core API** (hand-written C ABI, no UniFFI, so the grid is shared without copying; `core/src/lib.rs`, prefixed `sand_`, each documented there):
-`new(w, h, tps, seed)`, `free`, `reseed(upsideDown)`, `tune(json, len) → values applied | -1` (the "Copy settings" shape; `render` is the host's and skipped), `frame(dt, gx, gy, maxTicks) → ticks` + `moves()`, `grid_ptr()` / `grid_width()` / `grid_height()` (RGBA8, W×H×4, layout as in `src/sim.js`), `take_dirty() → first << 16 | last`, `flow() → *SandFlow` (u, v, solid pointers + nx, ny, fs), `snapshot() → len` + `snapshot_ptr()`, `restore(bytes, len) → 1 | 0`, and `alloc` / `dealloc` for hosts that have to copy bytes in (wasm).
-The core has no clock: the host measures time per tick and passes `maxTicks` (today's `BUDGET_MS` logic in `src/engine.js` moves to the hosts). In wasm, any call that allocates (`new`, `snapshot`, `restore`, `alloc`) can grow memory, so hosts renew their views of it afterwards.
+`new(w, h, tps, seed)`, `free`, `reseed(upsideDown)`, `tune(json, len) → values applied | -1` (the "Copy settings" shape; `render` is the host's and skipped), `frame(dt, gx, gy, maxTicks) → ticks` + `moves()`, `grid_ptr()` / `grid_width()` / `grid_height()` (RGBA8, W×H×4, layout as in `core/src/sim.rs`), `take_dirty() → first << 16 | last`, `flow() → *SandFlow` (u, v, solid pointers + nx, ny, fs), `snapshot() → len` + `snapshot_ptr()`, `restore(bytes, len) → 1 | 0`, and `alloc` / `dealloc` for hosts that have to copy bytes in (wasm).
+The core has no clock: the host measures time per tick and passes `maxTicks` (on the web, `BUDGET_MS` in `src/engine.js`). In wasm, any call that allocates (`new`, `snapshot`, `restore`, `alloc`) can grow memory, so hosts renew their views of it afterwards.
 Snapshots (`core/src/snapshot.rs`) hold the picture in motion: grains, liquid, awake chunks, random states and frame timing, so a restored engine carries on bit for bit. Tuning and the tick rate are host settings and stay out; a snapshot only restores onto the same grid size.
 
 **Shared:** all physics and its parameters (`params.json` is the single source for the core, the web tuning panel and a Swift tuning view, in the same JSON shape "Copy settings" produces), palettes, seeding, tick timing, snapshot format.
@@ -74,6 +74,7 @@ AR on iPhone (place on a table; fake refraction by sampling the camera feed, whi
 1. **Web on wasm** behind `?core=wasm`; compare against JS; make it the default; delete the JS physics.
    - a. Finish the C ABI: `tune`, `flow`, `snapshot`/`restore`. Done: `run.mjs . rust --tune <json|file>` tunes both versions (then draws a new picture, so seed settings count) and gives identical grids and liquid flow fields; `cargo test` checks that a restored engine carries on bit for bit.
    - b. `?core=wasm`: `src/engine.js` is the host (renderer + time budget) over a core with the C ABI's shape: `core-js.js` (the JS physics) or `core-wasm.js` (`src/sand_core.wasm`, committed, rebuilt by `tools/build-core.sh`). The grid is uploaded with `texSubImage2D` straight from a view on wasm memory. The budget now times the whole core frame (ticks + the once-per-frame liquid step) per tick, where it used to time the sand ticks alone; at the default speed (under one tick per frame) it never binds. In the browser at 1298×940, the same seed: identical grids with no tick limit; physics ~2.9 ms per frame in wasm against ~3.4–3.8 ms in JS.
+   - c. Done: wasm is the only core; `src/sim.js`, `fluid.js`, `seed.js`, `rng.js` and `core-js.js` are deleted. Defaults live in `core/params.json`: the core embeds it (`include_str!`, `cargo test` checks every setting is there and known) and the tuning panel fetches it. `tools/compare` runs a git ref's JS physics when it has `src/sim.js`, else its committed wasm; `run.mjs e8cfcb7 .` (the last JS) gives identical grids and liquid flow, tuned and untuned.
 2. **iOS non-AR:** SandKit, shared RealityKit scene with a virtual camera, CoreMotion gravity and tilt-driven reflections.
 3. **iPhone Duo:** hinge, tent posture, `ArrangementView`.
 4. **visionOS volume:** room lighting, transparency over passthrough, direct manipulation.

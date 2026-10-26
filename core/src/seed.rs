@@ -1,4 +1,4 @@
-//! Starting picture, a port of src/seed.js: the sand hanging at the top in wavy
+//! Starting picture, ported from src/seed.js: the sand hanging at the top in wavy
 //! colour bands (the underside shaped like the last picture's mountains, upside
 //! down), with the air still at the bottom, as if the frame had just been flipped.
 
@@ -13,8 +13,10 @@ pub struct SeedParams {
 }
 
 impl Default for SeedParams {
+    /// As core/params.json gives them.
     fn default() -> Self {
-        Self { sand: 0.38, air: 0.005 }
+        let d = crate::tune::defaults("seed");
+        Self { sand: d("sand"), air: d("air") }
     }
 }
 

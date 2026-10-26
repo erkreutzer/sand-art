@@ -1,5 +1,5 @@
-//! Seeded random numbers for everything drawn at seed time (mulberry32), as in
-//! src/rng.js, so a seed number always gives the same starting picture. The
+//! Seeded random numbers for everything drawn at seed time (mulberry32), as the
+//! JS sim had it, so a seed number always gives the same starting picture. The
 //! tick loop keeps its own xorshift state in `Sim`, itself drawn from here.
 
 pub struct Mulberry32(u32);
@@ -29,7 +29,7 @@ mod tests {
 
     #[test]
     fn matches_js() {
-        // mulberry32(42) in src/rng.js
+        // mulberry32(42) in the JS sim (src/rng.js before the wasm core)
         let mut r = Mulberry32::new(42);
         let got: Vec<f64> = (0..3).map(|_| r.next()).collect();
         assert_eq!(got, JS_42);

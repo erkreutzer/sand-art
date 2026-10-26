@@ -1,5 +1,5 @@
 //! Coarse incompressible liquid (Stam-style stable fluids) underneath the sand
-//! grid; a port of src/fluid.js.
+//! grid; ported from src/fluid.js, which it replaced.
 //!
 //! One fluid cell covers 2^fs x 2^fs sim cells. Velocities are in sim cells per
 //! tick, so the sand pass can add them straight onto a grain's motion.
@@ -23,8 +23,12 @@ pub struct FluidParams {
 }
 
 impl Default for FluidParams {
+    /// As core/params.json gives them.
     fn default() -> Self {
-        Self { sand_weight: 1.6, air_lift: 0.8, damping: 0.012, vorticity: 0.35, iterations: 18, max_speed: 3.0 }
+        let d = crate::tune::defaults("fluid");
+        let mut p = Self { sand_weight: d("sandWeight"), air_lift: d("airLift"), damping: d("damping"), vorticity: d("vorticity"), iterations: 0, max_speed: d("maxSpeed") };
+        p.set("iterations", d("iterations")); // rounded as when tuned
+        p
     }
 }
 

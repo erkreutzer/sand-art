@@ -1,6 +1,6 @@
 // The Rust core (core/, built into sand_core.wasm by tools/build-core.sh)
-// through its C ABI, with the same shape as core-js.js. The grid is read
-// straight out of wasm memory, so drawing it needs no copy.
+// through its C ABI. The grid is read straight out of wasm memory, so drawing
+// it needs no copy.
 
 export async function loadWasmCore(w, h, tps, seedNo) {
   const res = await fetch(new URL('./sand_core.wasm', import.meta.url));

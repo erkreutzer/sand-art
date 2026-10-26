@@ -1,18 +1,15 @@
 // Tuning panel (press D): live sliders for every physics setting, a flow-field
 // overlay, and stats. Tweaks persist in localStorage until reset, and "Copy"
-// puts them on the clipboard as JSON.
-import { params } from './sim.js';
-import { fluidParams } from './fluid.js';
-import { seedParams } from './seed.js';
+// puts them on the clipboard as JSON. Physics defaults come from the core's
+// params.json, the look's from render.js.
 import { renderParams } from './render.js';
-import { engineParams } from './core-js.js';
 
 // [key, label, min, max, step | 'log']
 const GROUPS = [
-  { title: 'Look', key: 'render', obj: renderParams, open: true, items: [
+  { title: 'Look', key: 'render', open: true, items: [
     ['liquidTint', 'Liquid opacity (× palette)', 0, 4, 0.05],
   ] },
-  { title: 'Liquid', key: 'fluid', obj: fluidParams, open: true, items: [
+  { title: 'Liquid', key: 'fluid', open: true, items: [
     ['vorticity', 'Swirl (vorticity)', 0, 3, 0.01],
     ['sandWeight', 'Sand drags liquid', 0, 6, 0.05],
     ['airLift', 'Bubbles lift liquid', 0, 3, 0.05],
@@ -20,20 +17,20 @@ const GROUPS = [
     ['maxSpeed', 'Max flow speed', 0.5, 6, 0.1],
     ['iterations', 'Pressure iterations', 4, 40, 1],
   ] },
-  { title: 'Grains', key: 'sim', obj: params, items: [
+  { title: 'Grains', key: 'sim', items: [
     ['fallSeconds', 'Sink time, full height (s)', 1, 12, 0.1],
     ['jitter', 'Random wander', 0, 0.5, 0.01],
     ['slide', 'Rolling while moving', 0, 1, 0.01],
     ['slideRest', 'Steep faces collapse', 0.001, 0.3, 'log'],
   ] },
-  { title: 'Hanging sand', key: 'sim', obj: params, items: [
+  { title: 'Hanging sand', key: 'sim', items: [
     ['flat', 'Lets go: flat underside', 1e-4, 0.3, 'log'],
     ['tip', 'Lets go: points', 1e-4, 0.5, 'log'],
     ['narrow', 'Lets go: narrow gaps', 1e-4, 0.5, 'log'],
     ['hole', 'Lets go: one-wide holes', 1e-4, 0.5, 'log'],
     ['slideWall', 'Cavity walls collapse', 1e-5, 0.1, 'log'],
   ] },
-  { title: 'Air barrier', key: 'sim', obj: params, items: [
+  { title: 'Air barrier', key: 'sim', items: [
     ['thinAir', 'Leak through thin air', 1e-4, 0.3, 'log'],
     ['leakFalloff', 'Leak kept per extra cell', 0.05, 0.95, 0.01],
     ['thickAir', 'Leak through deep air', 1e-6, 1e-2, 'log'],
@@ -42,11 +39,11 @@ const GROUPS = [
     ['airSpread', 'Air spreads sideways', 0, 1, 0.01],
     ['seep', 'Air seeps up through sand', 1e-6, 1e-2, 'log'],
   ] },
-  { title: 'New sand (applies on R)', key: 'seed', obj: seedParams, items: [
+  { title: 'New sand (applies on R)', key: 'seed', items: [
     ['air', 'Air amount', 5e-4, 0.03, 'log'],
     ['sand', 'Sand level', 0.15, 0.6, 0.01],
   ] },
-  { title: 'Simulation', key: 'engine', obj: engineParams, open: true, items: [
+  { title: 'Simulation', key: 'engine', open: true, items: [
     ['timeScale', 'Speed', 0.1, 4, 'log'],
   ] },
 ];
@@ -57,15 +54,16 @@ const save = (o) => { try { localStorage.setItem(STORE, JSON.stringify(o)); } ca
 const fmt = (v) => (Math.abs(v) >= 100 || Number.isInteger(v) ? String(Math.round(v * 100) / 100)
   : Math.abs(v) >= 0.01 ? v.toFixed(3).replace(/0+$/, '').replace(/\.$/, '') : v.toPrecision(2));
 
-export function createDebug({ host, reseed }) {
-  // Defaults are whatever the modules start with; then apply saved tweaks.
-  const defaults = {};
+export async function createDebug({ host, reseed }) {
+  // Defaults are what the core and the renderer start with; then apply saved tweaks.
+  const params = await (await fetch(new URL('../core/params.json', import.meta.url))).json();
+  const defaults = {}, values = {};
   for (const g of GROUPS) {
-    defaults[g.key] ||= {};
-    for (const [k] of g.items) defaults[g.key][k] = g.obj[k];
+    const d = (defaults[g.key] ||= {}), v = (values[g.key] ||= {});
+    for (const [k] of g.items) v[k] = d[k] = (g.key === 'render' ? renderParams : params[g.key])[k];
   }
   let overrides = load();
-  for (const g of GROUPS) Object.assign(g.obj, pick(overrides[g.key], g.items));
+  for (const g of GROUPS) Object.assign(values[g.key], pick(overrides[g.key], g.items));
   if (Object.keys(overrides).length) host.tune(overrides);
 
   function pick(o, items) {
@@ -107,14 +105,14 @@ export function createDebug({ host, reseed }) {
         <input type="range" min="${toSlider(min)}" max="${toSlider(max)}" step="${log ? 0.01 : step}">`;
       const input = row.querySelector('input'), out = row.querySelector('output');
       const sync = () => {
-        const v = g.obj[key];
+        const v = values[g.key][key];
         input.value = toSlider(v);
         out.textContent = fmt(v);
         row.classList.toggle('changed', v !== defaults[g.key][key]);
       };
       const set = (v) => {
         if (step === 1) v = Math.round(v);
-        g.obj[key] = v;
+        values[g.key][key] = v;
         (overrides[g.key] ||= {})[key] = v;
         if (v === defaults[g.key][key]) delete overrides[g.key][key];
         save(overrides);
@@ -141,7 +139,7 @@ export function createDebug({ host, reseed }) {
   panel.querySelector('[data-a=reset]').addEventListener('click', () => {
     overrides = {};
     save(overrides);
-    for (const g of GROUPS) Object.assign(g.obj, defaults[g.key]);
+    for (const g of GROUPS) Object.assign(values[g.key], defaults[g.key]);
     host.tune(defaults);
     rows.forEach((s) => s());
   });
@@ -196,8 +194,8 @@ export function createDebug({ host, reseed }) {
     update(s, extra) {
       if (panel.hidden || !s) return;
       statsEl.textContent =
-        `${s.w}×${s.h} grains @${extra.scale}px · ${(s.w * s.h / 1e6).toFixed(2)}M · ${extra.kind} · ${s.core} core\n` +
-        `physics ${s.coreMs.toFixed(1)}ms (${s.ticks} ticks${s.simMs != null ? `: sand ${s.simMs.toFixed(1)} liquid ${s.fluidMs.toFixed(1)}` : ''})  frame ${extra.frameMs.toFixed(1)}ms`;
+        `${s.w}×${s.h} grains @${extra.scale}px · ${(s.w * s.h / 1e6).toFixed(2)}M · ${extra.kind}\n` +
+        `physics ${s.coreMs.toFixed(1)}ms (${s.ticks} ticks)  frame ${extra.frameMs.toFixed(1)}ms`;
       if (s.flow && state.flow) drawFlow(s.flow);
     },
   };

@@ -1,4 +1,4 @@
-//! Cellular sand/liquid/air simulation; a port of src/sim.js.
+//! Cellular sand/liquid/air simulation; ported from src/sim.js, which it replaced.
 //!
 //! Every cell is one u32 so a move is a single swap and the whole grid can be
 //! uploaded to the GPU as an RGBA8 texture with zero conversion:
@@ -63,13 +63,15 @@ pub struct SimParams {
 }
 
 impl Default for SimParams {
+    /// As core/params.json gives them.
     fn default() -> Self {
+        let d = crate::tune::defaults("sim");
         Self {
-            fall_seconds: 4.2, rise_seconds: 1.3, jitter: 0.06, fall_air: 1.0,
-            hole: 0.04, narrow: 0.035, flat: 0.025, tip: 0.05,
-            thin_air: 0.02, leak_falloff: 0.5, thick_air: 0.00008,
-            slide: 0.8, slide_rest: 0.03, slide_wall: 0.003,
-            air_spread: 0.6, bubble_depth: 4.0, seep: 0.00005,
+            fall_seconds: d("fallSeconds"), rise_seconds: d("riseSeconds"), jitter: d("jitter"), fall_air: d("fallAir"),
+            hole: d("hole"), narrow: d("narrow"), flat: d("flat"), tip: d("tip"),
+            thin_air: d("thinAir"), leak_falloff: d("leakFalloff"), thick_air: d("thickAir"),
+            slide: d("slide"), slide_rest: d("slideRest"), slide_wall: d("slideWall"),
+            air_spread: d("airSpread"), bubble_depth: d("bubbleDepth"), seep: d("seep"),
         }
     }
 }

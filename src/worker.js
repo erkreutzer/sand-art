@@ -8,7 +8,7 @@ onmessage = async (e) => {
   const m = e.data;
   try {
     if (m.type === 'init') {
-      engine = await Engine.create(m.canvas, m.w, m.h, m.scale, m.tps, m.core);
+      engine = await Engine.create(m.canvas, m.w, m.h, m.scale, m.tps);
       engine.setPalette(m.palette);
       postMessage({ type: 'ready' });
     } else if (!engine) {

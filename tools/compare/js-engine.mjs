@@ -1,6 +1,6 @@
-// One version of the JS sim, run headless: src/engine.js's frame timing without
-// the drawing or the wall-clock budget (a fast enough machine never hits it),
-// so a run depends only on the seed number.
+// One version of the JS sim from git history (before the wasm core replaced it),
+// run headless: its frame timing without the drawing or the wall-clock budget
+// (a fast enough machine never hits it), so a run depends only on the seed number.
 import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';

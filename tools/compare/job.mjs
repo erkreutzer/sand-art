@@ -6,7 +6,7 @@ import { loadJs } from './js-engine.mjs';
 import { loadRust } from './rust-engine.mjs';
 import { countStreams } from './streams.mjs';
 
-// Grid layout as in src/sim.js: RGBA8 per cell (type, shade, energy, clock),
+// Grid layout as in core/src/sim.rs: RGBA8 per cell (type, shade, energy, clock),
 // one cell of wall all round.
 const LIQUID = 0, AIR = 1, SAND = 3, COLOURS = 6;
 
@@ -25,7 +25,7 @@ const eng = ver.create(w, h, seedNo);
 // Tuned as from the debug panel, then a new picture (R) so seed settings count too.
 if (tune) { eng.tune(tune); eng.reseed(false); }
 const { W } = eng;
-const res = h / 581;                  // reference grid height in src/sim.js
+const res = h / 581;                  // reference grid height in core/src/sim.rs
 
 // Sand still hanging: in each column, every grain above the first real gap
 // (open liquid or air at least ~3 mm deep) in the pile resting on the floor;

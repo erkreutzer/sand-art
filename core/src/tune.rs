@@ -1,12 +1,28 @@
 //! Live tuning from the JSON the debug panel's "Copy settings" produces:
 //! `{ "sim": { "fallSeconds": 3.5 }, "fluid": { ... }, "seed": { ... }, "engine": { ... } }`,
-//! keys as in src/sim.js, fluid.js, seed.js and engine.js. Other groups (the
-//! host's "render") and non-numeric values are skipped.
+//! keys as in core/params.json. Other groups (the host's "render") and
+//! non-numeric values are skipped.
 
 use crate::engine::EngineParams;
 use crate::fluid::FluidParams;
 use crate::seed::SeedParams;
 use crate::sim::SimParams;
+
+/// The settings every engine starts with, in the same shape. core/params.json
+/// is the one copy: hosts' tuning views read it for their defaults too.
+pub const DEFAULTS: &str = include_str!("../params.json");
+
+/// One group of DEFAULTS, by key; NaN for a value it doesn't have (a test
+/// checks there are none).
+pub(crate) fn defaults(group: &'static str) -> impl Fn(&str) -> f64 {
+    let all = parse(DEFAULTS).unwrap_or_default();
+    move |key| lookup(&all, group, key)
+}
+
+#[inline(never)]
+fn lookup(all: &[(String, String, f64)], group: &str, key: &str) -> f64 {
+    all.iter().find(|(g, k, _)| g == group && k == key).map_or(f64::NAN, |&(_, _, v)| v)
+}
 
 impl SimParams {
     pub fn set(&mut self, key: &str, v: f64) -> bool {
@@ -237,6 +253,26 @@ mod tests {
         assert!(parse("{\"sim\": {\"jitter\": 0.1}").is_none());
         assert!(parse("[1]").is_none());
         assert!(parse("{} x").is_none());
+    }
+
+    #[test]
+    fn params_json_is_all_used() {
+        // Every setting has a value there, every value there is one the core
+        // knows, and setting them all again changes nothing.
+        let (mut s, mut f, mut d, mut e) = (SimParams::default(), FluidParams::default(), SeedParams::default(), EngineParams::default());
+        let before = format!("{s:?}{f:?}{d:?}{e:?}");
+        assert!(!before.contains("NaN") && f.iterations > 0, "core/params.json is missing a value: {before}");
+        for (g, k, v) in parse(DEFAULTS).unwrap() {
+            let ok = match g.as_str() {
+                "sim" => s.set(&k, v),
+                "fluid" => f.set(&k, v),
+                "seed" => d.set(&k, v),
+                "engine" => e.set(&k, v),
+                _ => false,
+            };
+            assert!(ok, "core/params.json: unknown {g}.{k}");
+        }
+        assert_eq!(format!("{s:?}{f:?}{d:?}{e:?}"), before);
     }
 
     #[test]

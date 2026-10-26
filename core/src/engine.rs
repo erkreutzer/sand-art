@@ -1,4 +1,4 @@
-//! Simulation + liquid for one frame, as in src/engine.js minus the drawing.
+//! Simulation + liquid for one frame. The host (src/engine.js on the web) draws.
 //! The core has no clock: the host measures how long a tick takes and passes
 //! the most ticks it can afford this frame.
 
@@ -21,8 +21,9 @@ pub struct EngineParams {
 }
 
 impl Default for EngineParams {
+    /// As core/params.json gives them.
     fn default() -> Self {
-        Self { time_scale: 0.3 }
+        Self { time_scale: crate::tune::defaults("engine")("timeScale") }
     }
 }
 
@@ -75,8 +76,7 @@ impl Engine {
         self.sim.update_solids(&mut self.fluid, 0, ny);
     }
 
-    /// Live tuning from "Copy settings" JSON (src/tune.rs), as Engine.tune in
-    /// src/engine.js. Returns how many values were applied, or None if `json`
+    /// Live tuning from "Copy settings" JSON (src/tune.rs). Returns how many values were applied, or None if `json`
     /// isn't valid; seed settings take effect on the next reseed.
     pub fn tune(&mut self, json: &str) -> Option<usize> {
         let mut n = 0;
