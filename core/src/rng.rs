@@ -9,6 +9,10 @@ impl Mulberry32 {
         Self(seed)
     }
 
+    pub fn state(&self) -> u32 {
+        self.0
+    }
+
     /// Uniform in [0, 1).
     pub fn next(&mut self) -> f64 {
         self.0 = self.0.wrapping_add(0x6d2b79f5);

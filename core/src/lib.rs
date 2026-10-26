@@ -7,12 +7,16 @@ pub mod jsmath;
 pub mod rng;
 pub mod seed;
 pub mod sim;
+pub mod snapshot;
+pub mod tune;
 
 use engine::Engine;
 
 // ---------- C ABI ----------
 // Hand-written so the grid is shared without copying. In wasm the same
-// functions are the module's exports and pointers are offsets into its memory.
+// functions are the module's exports and pointers are offsets into its memory;
+// any call that allocates (new, snapshot, restore, alloc) may grow that memory,
+// so a host's views of it must be renewed afterwards.
 
 /// A new engine with a w x h grain grid, ticking tps times a second at normal
 /// speed; the same seed number always gives the same pictures.
@@ -91,4 +95,94 @@ pub unsafe extern "C" fn sand_take_dirty(e: *mut Engine) -> u32 {
         Some((a, b)) => (a as u32) << 16 | b as u32,
         None => u32::MAX,
     }
+}
+
+/// Live tuning: `len` bytes of UTF-8 JSON in the shape the debug panel's "Copy
+/// settings" produces ({"sim": {...}, "fluid": {...}, "seed": {...},
+/// "engine": {...}}, keys as in src/). Returns how many values were applied
+/// (unknown keys and the host's "render" group are skipped), or -1 if it isn't
+/// valid JSON. Seed settings take effect on the next reseed.
+/// # Safety
+/// `e` must come from `sand_new`; `json` must point to `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn sand_tune(e: *mut Engine, json: *const u8, len: usize) -> i32 {
+    match std::str::from_utf8(std::slice::from_raw_parts(json, len)).ok().and_then(|s| (*e).tune(s)) {
+        Some(n) => n as i32,
+        None => -1,
+    }
+}
+
+/// The liquid's velocity field, for the flow overlay: nx x ny cells, each
+/// covering 2^fs x 2^fs grid cells, with one cell of wall all round (fluid
+/// cell (x, y) is centred on grid cell ((x - 1) << fs) + (1 << fs) / 2).
+#[repr(C)]
+pub struct SandFlow {
+    /// Velocity in grid cells per tick, f32 per cell.
+    pub u: *const f32,
+    pub v: *const f32,
+    /// 1 where the cell is packed sand or wall (no flow), u8 per cell.
+    pub solid: *const u8,
+    pub nx: u32,
+    pub ny: u32,
+    pub fs: u32,
+}
+
+/// Safe to hand to another thread with the engine: it only points into it.
+unsafe impl Send for SandFlow {}
+
+/// The struct and its pointers stay valid until `sand_free`; the values
+/// change with every frame.
+/// # Safety
+/// `e` must come from `sand_new`.
+#[no_mangle]
+pub unsafe extern "C" fn sand_flow(e: *mut Engine) -> *const SandFlow {
+    let e = &mut *e;
+    let f = &e.fluid;
+    e.flow_view = SandFlow { u: f.u.as_ptr(), v: f.v.as_ptr(), solid: f.solid.as_ptr(), nx: f.nx as u32, ny: f.ny as u32, fs: f.fs };
+    &e.flow_view
+}
+
+/// Takes a snapshot of the whole picture in motion (src/snapshot.rs) and
+/// returns its length; the bytes are at `sand_snapshot_ptr` until the next
+/// snapshot. Tuning and the tick rate aren't included.
+/// # Safety
+/// `e` must come from `sand_new`.
+#[no_mangle]
+pub unsafe extern "C" fn sand_snapshot(e: *mut Engine) -> usize {
+    (*e).snapshot = snapshot::snapshot(&*e);
+    (*e).snapshot.len()
+}
+
+/// # Safety
+/// `e` must come from `sand_new`.
+#[no_mangle]
+pub unsafe extern "C" fn sand_snapshot_ptr(e: *const Engine) -> *const u8 {
+    (*e).snapshot.as_ptr()
+}
+
+/// Carries on from a snapshot taken on an engine of the same grid size.
+/// Returns 1, or 0 (engine untouched) if the bytes don't fit.
+/// # Safety
+/// `e` must come from `sand_new`; `data` must point to `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn sand_restore(e: *mut Engine, data: *const u8, len: usize) -> u32 {
+    snapshot::restore(&mut *e, std::slice::from_raw_parts(data, len)) as u32
+}
+
+/// `len` bytes for passing JSON or a snapshot in from a host that can't
+/// point into its own memory (wasm). Free with `sand_dealloc`.
+#[no_mangle]
+pub extern "C" fn sand_alloc(len: usize) -> *mut u8 {
+    unsafe { std::alloc::alloc(byte_layout(len)) }
+}
+
+/// # Safety
+/// `p` and `len` must come from one `sand_alloc` call.
+#[no_mangle]
+pub unsafe extern "C" fn sand_dealloc(p: *mut u8, len: usize) {
+    std::alloc::dealloc(p, byte_layout(len));
+}
+
+fn byte_layout(len: usize) -> std::alloc::Layout {
+    std::alloc::Layout::from_size_align(len.max(1), 1).unwrap()
 }

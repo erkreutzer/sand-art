@@ -27,15 +27,14 @@ function withRandom(R, fn) {
 // dir: a copy of some version's src/.
 export async function loadJs(dir) {
   const imp = (f) => import(pathToFileURL(join(dir, f)).href);
-  const [{ Sim }, { Fluid }, { seed }, { engineParams }] =
+  const [{ Sim, params }, { Fluid, fluidParams }, { seed, seedParams }, { engineParams }] =
     await Promise.all([imp('sim.js'), imp('fluid.js'), imp('seed.js'), imp('engine.js')]);
   const seeded = existsSync(join(dir, 'rng.js'));
   const num = (file, name) => +readFileSync(join(dir, file), 'utf8').match(new RegExp(`const ${name} = ([\\d.]+)`))[1];
   const MAX_TICKS = num('engine.js', 'MAX_TICKS'), tps = num('app.js', 'TICKS_PER_SEC');
-  const { timeScale } = engineParams;
 
   return {
-    tps, timeScale,
+    tps,
     create(w, h, seedNo) {
       const fluid = new Fluid(w + 2, h + 2, Math.max(w, h) > 1600 ? 4 : 3);
       const rng = mulberry32(seedNo);
@@ -52,12 +51,20 @@ export async function loadJs(dir) {
       return {
         W: sim.W, H: sim.H, bytes: sim.bytes,
         reseed,
+        // As Engine.tune (the module-wide settings, but each job has its own copy of the modules).
+        tune(t) {
+          const groups = { sim: params, fluid: fluidParams, seed: seedParams, engine: engineParams };
+          for (const [k, o] of Object.entries(groups)) if (o) Object.assign(o, t[k] || {});
+          sim.wakeAll();
+        },
+        flow: () => ({ u: fluid.u, v: fluid.v, solid: fluid.solid }),
         // As Engine.frame: returns ticks run and grain moves.
         frame(dt, gx, gy) {
           const ga = Math.atan2(gy, gx), gm = Math.hypot(gx, gy);
           if (!(Math.abs(ga - lastGA) < 0.01) || Math.abs(gm - lastGM) > 0.03) {
             sim.wakeAll(); lastGA = ga; lastGM = gm;
           }
+          const { timeScale } = engineParams;
           acc += dt * tps * timeScale;
           const n = Math.min(Math.ceil(MAX_TICKS * timeScale), Math.floor(acc));
           acc -= Math.floor(acc);

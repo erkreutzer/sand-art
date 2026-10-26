@@ -19,6 +19,20 @@ export async function loadRust(wasmFile, tps) {
           return view;
         },
         reseed: (upsideDown) => x.sand_reseed(e, upsideDown ? 1 : 0),
+        tune(t) {
+          const json = new TextEncoder().encode(JSON.stringify(t));
+          const p = x.sand_alloc(json.length);
+          new Uint8Array(x.memory.buffer, p, json.length).set(json);
+          const n = x.sand_tune(e, p, json.length);
+          x.sand_dealloc(p, json.length);
+          if (n < 0) throw new Error('sand_tune: not valid JSON');
+        },
+        // SandFlow in core/src/lib.rs: u, v, solid pointers, then nx, ny, fs.
+        flow() {
+          const [u, v, solid, nx, ny] = new Uint32Array(x.memory.buffer, x.sand_flow(e), 6), n = nx * ny;
+          const m = x.memory.buffer;
+          return { u: new Float32Array(m, u, n), v: new Float32Array(m, v, n), solid: new Uint8Array(m, solid, n) };
+        },
         frame(dt, gx, gy) {
           const ticks = x.sand_frame(e, dt, gx, gy, 0xffffffff);
           x.sand_take_dirty(e);

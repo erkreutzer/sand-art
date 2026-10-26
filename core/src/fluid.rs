@@ -10,6 +10,7 @@
 //! Fields are stored as f32 and the arithmetic is done in f64, as in the JS.
 
 use crate::jsmath::hypot;
+use crate::snapshot::{Reader, Writer};
 
 #[derive(Clone, Debug)]
 pub struct FluidParams {
@@ -74,6 +75,21 @@ impl Fluid {
         for a in [&mut self.u, &mut self.v, &mut self.p, &mut self.sand, &mut self.air] {
             a.fill(0.0);
         }
+    }
+
+    /// Snapshot state; the other fields are scratch within a step.
+    pub(crate) fn save(&self, w: &mut Writer) {
+        for a in [&self.u, &self.v, &self.p, &self.sand, &self.air] {
+            w.f32s(a);
+        }
+        w.u8s(&self.solid);
+    }
+
+    pub(crate) fn load(&mut self, r: &mut Reader) {
+        for a in [&mut self.u, &mut self.v, &mut self.p, &mut self.sand, &mut self.air] {
+            r.f32s(a);
+        }
+        r.u8s(&mut self.solid);
     }
 
     /// Advance one frame that covered `ticks` sim ticks under gravity (gx, gy).

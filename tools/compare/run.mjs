@@ -3,6 +3,10 @@
 // writes one composite PNG (a row per version, a column per snapshot).
 //
 //   node tools/compare/run.mjs [A] [B] [--seeds 1,2,3] [--size 1000x725] [--fresh 600] [--hold 600] [--fps 60]
+//                              [--tune '<json>' | --tune file.json]
+//
+// --tune: settings in the debug panel's "Copy settings" shape, applied to both
+// versions before a new starting picture is drawn.
 //
 // A version is "." (this working tree's src/), any git ref, or "rust" (this
 // working tree's core/, built for wasm); defaults HEAD and ".".
@@ -23,6 +27,8 @@ const [w, h] = opt('size', '1000x725').split('x').map(Number);
 const fresh = +opt('fresh', 600), hold = +opt('hold', 600), fps = +opt('fps', 60);
 const specs = [args[0] ?? 'HEAD', args[1] ?? '.'];
 const snapAt = [150];
+const tuneArg = opt('tune', null);
+const tune = tuneArg && JSON.parse(tuneArg.trim().startsWith('{') ? tuneArg : readFileSync(tuneArg, 'utf8'));
 
 // Each version gets its own copy of src/, marked as ES modules.
 const tmp = mkdtempSync(join(tmpdir(), 'sand-compare-'));
@@ -48,7 +54,7 @@ const tps = +readFileSync(join(root, 'src/app.js'), 'utf8').match(/const TICKS_P
 
 const t0 = Date.now();
 const run = (k, seedNo) => new Promise((resolve, reject) => {
-  const job = { dir: dirs[k], wasm: specs[k] === 'rust' ? wasm : null, tps, seedNo, w, h, fresh, hold, fps, snapAt };
+  const job = { dir: dirs[k], wasm: specs[k] === 'rust' ? wasm : null, tps, seedNo, w, h, fresh, hold, fps, snapAt, tune };
   const wk = new Worker(join(here, 'job.mjs'), { workerData: job });
   wk.once('message', resolve); wk.once('error', reject);
 });
@@ -63,6 +69,7 @@ const pad = (s, n) => String(s).padEnd(n);
 const f1 = (v) => (Number.isFinite(v) ? v.toFixed(1) : '-');
 
 console.log(`${w}x${h} at ${fps} fps, seeds ${seeds.join(',')}, fresh ${fresh}s, flips held ${hold}s  (A = ${names[0]}, B = ${names[1]})`);
+if (tune) console.log(`tuned: ${JSON.stringify(tune)}`);
 console.log(`${pad('', 11)}${pad('moves/tick k: 0-10s 10-60 60-300 300+', 40)}${pad('hanging %: 60s 300s end', 25)}${pad('t50 s', 7)}${pad('streams avg/max', 17)}colour spread`);
 const phaseNames = ['fresh', 'flip 1', 'flip 2'];
 phaseNames.forEach((ph, p) => {
@@ -75,9 +82,12 @@ phaseNames.forEach((ph, p) => {
     console.log(`${pad(v ? '' : ph, 8)}${pad('AB'[v], 3)}${pad(mv.map(f1).join(' '), 40)}${pad(hg.map(f1).join(' '), 25)}${pad(f1(t50), 7)}${pad(`${f1(st)} / ${stMax}`, 17)}${mean(r.map((m) => m.spread)).toFixed(2)}`);
   });
 });
-const same = phaseNames.map((_, p) => seeds.every((_, s) => results[0][s].phases[p].hash === results[1][s].phases[p].hash));
-console.log(same.every(Boolean) ? 'grids: A and B identical bit for bit at every phase end'
-  : `grids differ from: ${phaseNames[same.indexOf(false)]}`);
+for (const [what, key] of [['grids', 'hash'], ['liquid flow', 'flowHash']]) {
+  const same = phaseNames.map((_, p) => seeds.every((_, s) => results[0][s].phases[p][key] === results[1][s].phases[p][key]));
+  console.log(same.every(Boolean) ? `${what}: A and B identical bit for bit at every phase end`
+    : `${what} differ from: ${phaseNames[same.indexOf(false)]}`);
+}
+console.log(`grid hashes (seed ${seeds[0]}): ${results.map((runs, v) => 'AB'[v] + ' ' + runs[0].phases.map((m) => m.hash).join(' ')).join(' | ')}`);
 
 // ---------- composite image (first seed) ----------
 const rows = results.map((runs) => runs[0].snaps);
@@ -90,6 +100,6 @@ rows.forEach((snaps, r) => snaps.forEach((s, c) => {
 }));
 const outDir = join(here, 'out');
 mkdirSync(outDir, { recursive: true });
-const file = join(outDir, `${names.map((n) => n.replace(/\W+/g, '-')).join('_vs_')}_seed${seeds[0]}.png`);
+const file = join(outDir, `${names.map((n) => n.replace(/\W+/g, '-')).join('_vs_')}${tune ? '_tuned' : ''}_seed${seeds[0]}.png`);
 writePng(file, CW, CH, img);
 console.log(`image: ${relative(process.cwd(), file)}  (rows A, B; columns ${rows[0].map((s) => s.label).join(', ')})  [${Math.round((Date.now() - t0) / 1000)}s]`);

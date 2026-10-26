@@ -15,13 +15,15 @@ const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const SAND_RGB = ['#0a2f7a', '#1a5fc4', '#22b4cf', '#7ddde3', '#eef7f6', '#071d4f', '#f2c443'].map(hex);
 const LIQ_TOP = hex('#f4f7f8'), LIQ_BOT = hex('#e3eaee'), AIR_RGB = hex('#fbfdfe');
 
-const { dir, wasm, tps, seedNo, w, h, fresh, hold, fps: FPS, snapAt } = workerData;
+const { dir, wasm, tps, seedNo, w, h, fresh, hold, fps: FPS, snapAt, tune } = workerData;
 const DT = 1 / FPS;
 const FLIP_MS = 1150;                 // flip() in src/app.js
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
 const ver = wasm ? await loadRust(wasm, tps) : await loadJs(dir);
 const eng = ver.create(w, h, seedNo);
+// Tuned as from the debug panel, then a new picture (R) so seed settings count too.
+if (tune) { eng.tune(tune); eng.reseed(false); }
 const { W } = eng;
 const res = h / 581;                  // reference grid height in src/sim.js
 
@@ -124,6 +126,9 @@ for (const ph of phases) {
   }
   m.spread = nSpread ? spread / nSpread : 0;
   m.hash = createHash('sha1').update(eng.bytes).digest('hex').slice(0, 12);
+  const fl = eng.flow();
+  m.flowHash = createHash('sha1').update(new Uint8Array(fl.u.buffer, fl.u.byteOffset, fl.u.byteLength))
+    .update(new Uint8Array(fl.v.buffer, fl.v.byteOffset, fl.v.byteLength)).update(fl.solid).digest('hex').slice(0, 12);
   out.push(m);
 }
 parentPort.postMessage({ phases: out, snaps }, snaps.map((s) => s.rgb.buffer));

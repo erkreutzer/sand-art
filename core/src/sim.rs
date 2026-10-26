@@ -26,6 +26,7 @@
 use crate::fluid::Fluid;
 use crate::jsmath::{hypot, round};
 use crate::rng::Mulberry32;
+use crate::snapshot::{Reader, Writer};
 
 pub const LIQUID: u32 = 0;
 pub const AIR: u32 = 1;
@@ -180,6 +181,25 @@ impl Sim {
 
     pub fn set(&mut self, x: usize, y: usize, typ: u32, shade: u32) {
         self.cells[(y + 1) * self.pw + x + 1] = typ | (shade << 8);
+    }
+
+    /// Snapshot state; `next` and `air_in` are scratch, cleared every tick.
+    pub(crate) fn save(&self, w: &mut Writer) {
+        w.u32(self.tick);
+        w.u32(self.seed);
+        w.u32s(&self.cells);
+        w.u8s(&self.active);
+    }
+
+    /// Restores what `save` wrote, without waking anything (that would change
+    /// what happens next); the whole grid counts as changed.
+    pub(crate) fn load(&mut self, r: &mut Reader) {
+        self.tick = r.u32();
+        self.seed = r.u32();
+        r.u32s(&mut self.cells);
+        r.u8s(&mut self.active);
+        self.dirty_min = 0;
+        self.dirty_max = self.ph as isize - 1;
     }
 
     pub fn wake_all(&mut self) {
