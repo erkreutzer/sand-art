@@ -23,7 +23,7 @@ tools/compare/   headless scenario runner: JS reference vs Rust core
 
 **Why Rust:** clean targets for both wasm (wasm-bindgen) and a static library for Swift; the sim is packed-integer arrays and tight loops, so it ports almost line for line. Rejected: keeping JS on Apple (an app's embedded JavaScriptCore has no JIT, so it's far too slow), a web view on visionOS (no RealityKit glass), Swift→wasm (less mature toolchain).
 
-**Core API** (hand-written C ABI, about 8 functions, no UniFFI, so the grid is shared without copying):
+**Core API** (hand-written C ABI, about 8 functions, no UniFFI, so the grid is shared without copying; `core/src/lib.rs`, prefixed `sand_`):
 `new(w, h, tps, seed)`, `reseed(upsideDown)`, `tune(json)`, `frame(dt, gx, gy, maxTicks) → stats`, `grid_ptr()` (RGBA8, W×H×4, layout as in `src/sim.js`), `take_dirty() → row range`, `flow()`, `snapshot()` / `restore()`.
 The core has no clock: the host measures time per tick and passes `maxTicks` (today's `BUDGET_MS` logic in `src/engine.js` moves to the hosts).
 
@@ -69,7 +69,7 @@ AR on iPhone (place on a table; fake refraction by sampling the camera feed, whi
 0. **Parity harness, then Rust port.**
    - a. Seeded PRNG in `src/seed.js` instead of `Math.random`, so both versions start from the same picture (this alone must not change behaviour).
    - b. `tools/compare/`: headless runner for the standard scenarios that prints a few numbers per scenario (moves per tick, sand still hanging, pour count, how evenly the colour bands drain) and writes one side-by-side image per run. `sim.js`, `fluid.js` and `seed.js` already run in Node with no browser (about 3.5 ms per frame at 1000×725, 2 ticks plus fluid).
-   - c. Port `sim.js` + `fluid.js` + `seed.js` to `core/`. Expect statistical agreement, not bit-exact: JS does float maths in 64-bit, the port in 32-bit.
+   - c. Port `sim.js` + `fluid.js` + `seed.js` (and `engine.js`'s frame timing) to `core/`. The port keeps the JS number model: f64 arithmetic, f32 storage for the liquid fields, Math.hypot and Math.round reproduced exactly (`core/src/jsmath.rs`). So it matches the JS bit for bit rather than statistically, and any difference in the runner is a bug, not noise. Done: `node tools/compare/run.mjs . rust` builds the core for wasm and gives identical grids; so do tilted, rotating and near-flat gravity. Not in the C ABI yet: `tune`, `flow`, `snapshot`/`restore` (needed from phase 1 on).
 1. **Web on wasm** behind `?core=wasm`; compare against JS; make it the default; delete the JS physics.
 2. **iOS non-AR:** SandKit, shared RealityKit scene with a virtual camera, CoreMotion gravity and tilt-driven reflections.
 3. **iPhone Duo:** hinge, tent posture, `ArrangementView`.

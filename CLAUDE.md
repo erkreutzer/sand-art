@@ -4,7 +4,7 @@ Moving sand picture simulation: coloured sand, liquid and a little air between t
 
 - Run: `python3 -m http.server 5178` (also in `.claude/launch.json`), open http://localhost:5178. `?debug` opens the tuning panel, `?main` runs without the worker.
 - `src/sim.js`, `src/fluid.js` and `src/seed.js` have no browser dependencies and run headless in Node.
-- Compare: `node tools/compare/run.mjs <A> <B> --seeds 1,2` runs the standard scenarios on two versions (`.` = working tree, or any git ref), prints a few numbers per phase and writes one side-by-side PNG to `tools/compare/out/`. The same seed number gives the same starting picture in both.
+- Compare: `node tools/compare/run.mjs <A> <B> --seeds 1,2` runs the standard scenarios on two versions (`.` = working tree, any git ref, or `rust` = `core/` built for wasm), prints a few numbers per phase and writes one side-by-side PNG to `tools/compare/out/`. The same seed number gives the same starting picture in both.
 
 ## Native apps
 

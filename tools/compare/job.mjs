@@ -3,6 +3,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { createHash } from 'node:crypto';
 import { loadJs } from './js-engine.mjs';
+import { loadRust } from './rust-engine.mjs';
 import { countStreams } from './streams.mjs';
 
 // Grid layout as in src/sim.js: RGBA8 per cell (type, shade, energy, clock),
@@ -14,14 +15,14 @@ const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const SAND_RGB = ['#0a2f7a', '#1a5fc4', '#22b4cf', '#7ddde3', '#eef7f6', '#071d4f', '#f2c443'].map(hex);
 const LIQ_TOP = hex('#f4f7f8'), LIQ_BOT = hex('#e3eaee'), AIR_RGB = hex('#fbfdfe');
 
-const { dir, seedNo, w, h, fresh, hold, fps: FPS, snapAt } = workerData;
+const { dir, wasm, tps, seedNo, w, h, fresh, hold, fps: FPS, snapAt } = workerData;
 const DT = 1 / FPS;
 const FLIP_MS = 1150;                 // flip() in src/app.js
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 
-const ver = await loadJs(dir);
+const ver = wasm ? await loadRust(wasm, tps) : await loadJs(dir);
 const eng = ver.create(w, h, seedNo);
-const { W, bytes } = eng;
+const { W } = eng;
 const res = h / 581;                  // reference grid height in src/sim.js
 
 // Sand still hanging: in each column, every grain above the first real gap
@@ -30,6 +31,7 @@ const res = h / 581;                  // reference grid height in src/sim.js
 // a short gap doesn't count.
 // Pour streams: see countStreams.
 function measure(down) {
+  const bytes = eng.bytes;
   const hang = new Float64Array(COLOURS + 1);
   const total = new Float64Array(COLOURS + 1);
   const falling = new Int32Array(w + 1);
@@ -54,6 +56,7 @@ function measure(down) {
 }
 
 function snapshot(upsideDown) {
+  const bytes = eng.bytes;
   const s = 2, sw = Math.floor(w / s), sh = Math.floor(h / s);
   const rgb = new Uint8Array(sw * sh * 3);
   for (let Y = 0; Y < sh; Y++)
@@ -120,7 +123,7 @@ for (const ph of phases) {
     }
   }
   m.spread = nSpread ? spread / nSpread : 0;
-  m.hash = createHash('sha1').update(bytes).digest('hex').slice(0, 12);
+  m.hash = createHash('sha1').update(eng.bytes).digest('hex').slice(0, 12);
   out.push(m);
 }
 parentPort.postMessage({ phases: out, snaps }, snaps.map((s) => s.rgb.buffer));

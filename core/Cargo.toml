@@ -1,0 +1,14 @@
+[package]
+name = "sand-core"
+version = "0.1.0"
+edition = "2021"
+description = "Sand picture simulation core: grains, liquid, seeding and frame timing"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"
