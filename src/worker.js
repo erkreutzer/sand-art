@@ -4,11 +4,11 @@ import { Engine } from './engine.js';
 
 let engine = null;
 
-onmessage = (e) => {
+onmessage = async (e) => {
   const m = e.data;
   try {
     if (m.type === 'init') {
-      engine = new Engine(m.canvas, m.w, m.h, m.scale, m.tps);
+      engine = await Engine.create(m.canvas, m.w, m.h, m.scale, m.tps, m.core);
       engine.setPalette(m.palette);
       postMessage({ type: 'ready' });
     } else if (!engine) {

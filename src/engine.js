@@ -1,39 +1,32 @@
-// Simulation + liquid + rendering for one frame. Runs inside the worker, or on
-// the main thread as a fallback where OffscreenCanvas/WebGL2 isn't available.
-import { Sim, params } from './sim.js';
-import { Fluid, fluidParams } from './fluid.js';
+// Host for the simulation core: picks the JS or the wasm core, keeps the
+// per-tick time budget, and draws. Runs inside the worker, or on the main
+// thread as a fallback where OffscreenCanvas/WebGL2 isn't available.
 import { Renderer, renderParams } from './render.js';
-import { seed, seedParams } from './seed.js';
-import { mulberry32, randomSeed } from './rng.js';
+import { randomSeed } from './rng.js';
 
-const MAX_TICKS = 8;           // per frame, at normal speed
 const BUDGET_MS = 11;          // run fewer ticks (slow motion) rather than drop frames
-
-// Everything (sinking, pouring, bubbles, liquid) plays at this fraction of the
-// speeds tuned in sim.js and fluid.js. At 1 it looks sped up; 0.3 is about the
-// pace of a real sand picture.
-export const engineParams = { timeScale: 0.3 };
+const NO_LIMIT = 0xffffffff;
 
 export class Engine {
-  // seedNo: the same number always gives the same pictures; by default a new one each time.
-  constructor(canvas, w, h, scale, tps, seedNo = randomSeed()) {
-    this.rng = mulberry32(seedNo);
-    // Liquid cells span 8x8 sim cells (16x16 on huge grids): fine enough for
-    // a curtain of sand to roll up into eddies.
-    this.fluid = new Fluid(w + 2, h + 2, Math.max(w, h) > 1600 ? 4 : 3);
-    this.sim = new Sim(w, h, this.fluid, this.rng);
-    this.sim.setTickRate(tps);
-    this.tps = tps;
-    this.renderer = new Renderer(canvas, this.sim, scale);
-    this.acc = 0; this.perTick = 0; this.frameNo = 0;
-    this.lastGA = NaN; this.lastGM = NaN;
-    this.reseed();
+  // core: 'js' or 'wasm'. seedNo: the same number always gives the same
+  // pictures; by default a new one each time.
+  static async create(canvas, w, h, scale, tps, core = 'js', seedNo = randomSeed()) {
+    const c = core === 'wasm'
+      ? await (await import('./core-wasm.js')).loadWasmCore(w, h, tps, seedNo)
+      : new (await import('./core-js.js')).JsCore(w, h, tps, seedNo);
+    return new Engine(canvas, c, core, scale);
+  }
+
+  constructor(canvas, core, kind, scale) {
+    this.core = core;
+    this.kind = kind;
+    this.renderer = new Renderer(canvas, core, scale);
+    this.perTick = 0;
+    this.redraw = true;
   }
 
   reseed(upsideDown = false) {
-    seed(this.sim, this.rng, upsideDown);
-    this.fluid.reset();
-    this.sim.updateSolids(0, this.fluid.ny);
+    this.core.reseed(upsideDown);
     this.redraw = true;
   }
 
@@ -41,53 +34,29 @@ export class Engine {
 
   // Live tuning, grouped as in the debug panel.
   tune(t) {
-    Object.assign(params, t.sim || {});
-    Object.assign(fluidParams, t.fluid || {});
-    Object.assign(seedParams, t.seed || {});
     if (t.render) { Object.assign(renderParams, t.render); this.renderer.applyLiquid(); this.redraw = true; }
-    Object.assign(engineParams, t.engine || {});
-    this.sim.wakeAll();
+    this.core.tune(t);
   }
 
   frame(dt, gx, gy, glint, poseChanged, paused, wantFlow) {
-    const { sim, fluid } = this;
-    const ga = Math.atan2(gy, gx), gm = Math.hypot(gx, gy);
-    if (!(Math.abs(ga - this.lastGA) < 0.01) || Math.abs(gm - this.lastGM) > 0.03) {
-      sim.wakeAll(); this.lastGA = ga; this.lastGM = gm;
-    }
-
-    const { timeScale } = engineParams;
-    this.acc += dt * this.tps * timeScale;
-    const cap = Math.ceil(MAX_TICKS * timeScale);
-    const budget = this.perTick > 0 ? Math.max(1, Math.floor(BUDGET_MS / this.perTick)) : cap;
-    let n = paused ? 0 : Math.min(cap, budget, Math.floor(this.acc));
-    this.acc -= Math.floor(this.acc);
-    if (this.acc > 1) this.acc = 1;
-
+    const { core } = this;
+    // The core has no clock: allow as many ticks as recent ones say fit the budget.
+    const maxTicks = paused ? 0 : this.perTick > 0 ? Math.max(1, Math.floor(BUDGET_MS / this.perTick)) : NO_LIMIT;
     const t0 = performance.now();
-    let moves = 0;
-    for (let i = 0; i < n; i++) { sim.step(gx, gy); moves += sim.moves; }
-    const t1 = performance.now();
-    if (n) this.perTick = this.perTick ? this.perTick * 0.9 + ((t1 - t0) / n) * 0.1 : (t1 - t0) / n;
+    const s = core.frame(dt, gx, gy, maxTicks);
+    const ms = performance.now() - t0;
+    if (s.ticks) this.perTick = this.perTick ? this.perTick * 0.9 + (ms / s.ticks) * 0.1 : ms / s.ticks;
 
-    // Liquid: once per frame, with a rolling refresh of which cells are packed sand.
-    if (n) {
-      const band = Math.ceil(fluid.ny / 6), f = this.frameNo++ % 6;
-      sim.updateSolids(f * band, (f + 1) * band);
-      fluid.step(gx, gy, n);
-    }
-    const t2 = performance.now();
-
-    const rows = sim.takeDirty();
+    const rows = core.takeDirty();
     if (rows || poseChanged || this.redraw) {
       this.renderer.upload(rows);
       this.renderer.draw(glint);
       this.redraw = false;
     }
-    const stats = { ticks: n, simMs: t1 - t0, fluidMs: t2 - t1, moves, w: sim.w, h: sim.h };
+    const stats = { core: this.kind, ticks: s.ticks, coreMs: ms, simMs: s.simMs, fluidMs: s.fluidMs, moves: s.moves, w: core.w, h: core.h };
     if (wantFlow) {
-      const { u, v, solid, nx, ny, fs } = fluid;
-      stats.flow = { u: u.slice(), v: v.slice(), solid: solid.slice(), nx, ny, fs, W: sim.W, H: sim.H };
+      const { u, v, solid, nx, ny, fs } = core.flow();
+      stats.flow = { u: u.slice(), v: v.slice(), solid: solid.slice(), nx, ny, fs, W: core.W, H: core.H };
     }
     return stats;
   }

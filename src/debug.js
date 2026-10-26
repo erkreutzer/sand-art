@@ -5,7 +5,7 @@ import { params } from './sim.js';
 import { fluidParams } from './fluid.js';
 import { seedParams } from './seed.js';
 import { renderParams } from './render.js';
-import { engineParams } from './engine.js';
+import { engineParams } from './core-js.js';
 
 // [key, label, min, max, step | 'log']
 const GROUPS = [
@@ -196,8 +196,8 @@ export function createDebug({ host, reseed }) {
     update(s, extra) {
       if (panel.hidden || !s) return;
       statsEl.textContent =
-        `${s.w}×${s.h} grains @${extra.scale}px · ${(s.w * s.h / 1e6).toFixed(2)}M · ${extra.kind}\n` +
-        `sand ${s.simMs.toFixed(1)}ms (${s.ticks} ticks)  liquid ${s.fluidMs.toFixed(1)}ms  frame ${extra.frameMs.toFixed(1)}ms`;
+        `${s.w}×${s.h} grains @${extra.scale}px · ${(s.w * s.h / 1e6).toFixed(2)}M · ${extra.kind} · ${s.core} core\n` +
+        `physics ${s.coreMs.toFixed(1)}ms (${s.ticks} ticks${s.simMs != null ? `: sand ${s.simMs.toFixed(1)} liquid ${s.fluidMs.toFixed(1)}` : ''})  frame ${extra.frameMs.toFixed(1)}ms`;
       if (s.flow && state.flow) drawFlow(s.flow);
     },
   };

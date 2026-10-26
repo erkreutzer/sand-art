@@ -75,7 +75,8 @@ document.documentElement.style.setProperty('--grain-v', grainV);
 let palIndex = Math.min(palettes.length - 1, Math.max(0, +(store.get('sand.palette') ?? 0) || 0));
 
 async function startEngine() {
-  const init = { w: gw, h: gh, scale, tps: TICKS_PER_SEC, palette: palettes[palIndex] };
+  // ?core=wasm runs the Rust core (core/) instead of the JS physics.
+  const init = { w: gw, h: gh, scale, tps: TICKS_PER_SEC, palette: palettes[palIndex], core: query.get('core') === 'wasm' ? 'wasm' : 'js' };
   if (canvas.transferControlToOffscreen && !query.has('main')) {
     let worker;
     try {
@@ -95,7 +96,7 @@ async function startEngine() {
     canvas = fresh;
   }
   const { Engine } = await import('./engine.js');
-  const engine = new Engine(canvas, gw, gh, scale, TICKS_PER_SEC);
+  const engine = await Engine.create(canvas, gw, gh, scale, TICKS_PER_SEC, init.core);
   engine.setPalette(init.palette);
   return {
     kind: 'main thread', engine, stats: null,
@@ -340,4 +341,4 @@ requestAnimationFrame(loop);
 
 // Console access: sand.tune({ fluid: { vorticity: 0.5 } }) (the D panel does the same).
 // Load with ?main to run the engine on this thread and reach it as sand.engine.
-window.sand = { flip, seed: reseed, tune: (t) => host.tune(t), engine: host.engine, paused: false };
+window.sand = { flip, seed: reseed, tune: (t) => host.tune(t), engine: host.engine, paused: false, get stats() { return host.stats; } };

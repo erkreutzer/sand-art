@@ -27,11 +27,13 @@ function withRandom(R, fn) {
 // dir: a copy of some version's src/.
 export async function loadJs(dir) {
   const imp = (f) => import(pathToFileURL(join(dir, f)).href);
+  // Frame timing lives in core-js.js since the Rust core arrived, in engine.js before.
+  const timing = existsSync(join(dir, 'core-js.js')) ? 'core-js.js' : 'engine.js';
   const [{ Sim, params }, { Fluid, fluidParams }, { seed, seedParams }, { engineParams }] =
-    await Promise.all([imp('sim.js'), imp('fluid.js'), imp('seed.js'), imp('engine.js')]);
+    await Promise.all([imp('sim.js'), imp('fluid.js'), imp('seed.js'), imp(timing)]);
   const seeded = existsSync(join(dir, 'rng.js'));
   const num = (file, name) => +readFileSync(join(dir, file), 'utf8').match(new RegExp(`const ${name} = ([\\d.]+)`))[1];
-  const MAX_TICKS = num('engine.js', 'MAX_TICKS'), tps = num('app.js', 'TICKS_PER_SEC');
+  const MAX_TICKS = num(timing, 'MAX_TICKS'), tps = num('app.js', 'TICKS_PER_SEC');
 
   return {
     tps,
