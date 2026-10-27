@@ -1,3 +1,7 @@
 .DS_Store
 tools/compare/out/
 core/target/
+apple/SandKit/SandCore.xcframework/
+apple/build/
+apple/SandKit/.build/
+.swiftpm/

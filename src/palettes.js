@@ -1,47 +1,5 @@
 // Six sand colours + a glitter colour, plus the liquid and air the sand sits in.
 // liquidAlpha: how much the liquid tints what's behind the glass (0 = water-clear).
 // Dark palettes use a dark, mostly opaque liquid, as some real frames do.
-export const palettes = [
-  {
-    name: 'Lagoon',
-    sand: ['#0a2f7a', '#1a5fc4', '#22b4cf', '#7ddde3', '#eef7f6', '#071d4f'],
-    glitter: '#f2c443',
-    liquid: ['#f4f7f8', '#e3eaee'], liquidAlpha: 0.07, air: '#fbfdfe', rim: '#9aa8b2',
-  },
-  {
-    name: 'Desert',
-    sand: ['#6e2414', '#bf5a2a', '#e2a457', '#f4e2bd', '#2e1c16', '#9c6450'],
-    glitter: '#e8b06a',
-    liquid: ['#f7f3ee', '#ebe3d9'], liquidAlpha: 0.1, air: '#fdfbf8', rim: '#a99a8a',
-  },
-  {
-    name: 'Ember',
-    sand: ['#24092f', '#8a1652', '#e23d33', '#f8903a', '#fdd662', '#fff1d0'],
-    glitter: '#ffd36b',
-    liquid: ['#1b1014', '#0c0709'], liquidAlpha: 0.88, air: '#3a2a2e', rim: '#79606a',
-  },
-  {
-    name: 'Ink',
-    sand: ['#0b0b0d', '#38383c', '#86868c', '#cdcdd1', '#f6f6f4', '#1d1d20'],
-    glitter: '#dfe3ea',
-    liquid: ['#f5f5f3', '#e6e6e3'], liquidAlpha: 0.06, air: '#fcfcfb', rim: '#9a9a98',
-  },
-  {
-    name: 'Forest',
-    sand: ['#0d2b1c', '#2c6638', '#7c9f4a', '#d9d29a', '#553620', '#a6c49e'],
-    glitter: '#e9c46a',
-    liquid: ['#f2f5ef', '#e1e8dc'], liquidAlpha: 0.09, air: '#fbfcfa', rim: '#94a08e',
-  },
-  {
-    name: 'Candy',
-    sand: ['#ff5c9f', '#ffd166', '#5fe0ae', '#5aa2fa', '#bd7cfb', '#fffaf5'],
-    glitter: '#ffffff',
-    liquid: ['#fbf8fb', '#efe9f1'], liquidAlpha: 0.08, air: '#ffffff', rim: '#ab9fb2',
-  },
-  {
-    name: 'Aurora',
-    sand: ['#041029', '#0e4a5a', '#25c2b1', '#9757e3', '#f159b3', '#ddfafb'],
-    glitter: '#c8f7ff',
-    liquid: ['#0a1020', '#04070f'], liquidAlpha: 0.85, air: '#1f2a40', rim: '#5b6b8a',
-  },
-];
+// They live in core/palettes.json, shared with the native apps.
+export const palettes = await (await fetch(new URL('../core/palettes.json', import.meta.url))).json();

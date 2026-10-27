@@ -93,7 +93,8 @@ for (const [what, key] of [['grids', 'hash'], ['liquid flow', 'flowHash']]) {
   console.log(same.every(Boolean) ? `${what}: A and B identical bit for bit at every phase end`
     : `${what} differ from: ${phaseNames[same.indexOf(false)]}`);
 }
-console.log(`grid hashes (seed ${seeds[0]}): ${results.map((runs, v) => 'AB'[v] + ' ' + runs[0].phases.map((m) => m.hash).join(' ')).join(' | ')}`);
+for (const [what, key] of [['grid', 'hash'], ['flow', 'flowHash']])
+  console.log(`${what} hashes (seed ${seeds[0]}): ${results.map((runs, v) => 'AB'[v] + ' ' + runs[0].phases.map((m) => m[key]).join(' ')).join(' | ')}`);
 
 // ---------- composite image (first seed) ----------
 const rows = results.map((runs) => runs[0].snaps);
