@@ -14,6 +14,7 @@ Work on the shared core, iPhone, iPhone Duo and Vision Pro follows `docs/native-
 - `tools/build-ios.sh [Debug|Release]`: core, `xcodegen` (`apple/project.yml`; the `.xcodeproj` isn't committed), simulator build; prints errors, then the `.app` path.
 - `swift test` in `apple/SandKit`: native core vs the web's hashes (update them from `run.mjs` after a physics change), plus the Metal kernel's output for `tools/compare/kernel.html` (open it from the static server; should be within 1/255).
 - Simulator: `xcrun simctl install booted <app>`, `xcrun simctl launch booted art.sand.SandArt -flipEvery 5 -paletteEvery 7` (test hooks; `-sand.palette N` picks one); frame times every 2 s in `xcrun simctl spawn booted log show --info --predicate 'subsystem == "art.sand.SandArt"'`.
+- iPhone Duo hooks (the simulator can't move the hinge): `-postureEvery 15 -fakeTentSensor 1` cycles open / tent / shut, `-fakeHinge <deg>` holds one angle, `-rotateEvery <s>` turns the interface, `-openTuning 1` opens the tuning panel. The Duo simulator shows its cover display (`--display=1` for `simctl io screenshot`).
 
 ## Physics rules
 
