@@ -37,6 +37,24 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
         INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UIRequiresFullScreen: YES
+  # Phase 4: the Vision Pro app, a volume in the shared space.
+  SandArtVision:
+    type: application
+    platform: visionOS
+    deploymentTarget: "26.0" # ManipulationComponent
+    sources:
+      - path: SandArtVision
+        excludes: [Info.plist]
+    dependencies:
+      - package: SandKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.sand.SandArtVision
+        TARGETED_DEVICE_FAMILY: "7"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_FILE: SandArtVision/Info.plist
+        INFOPLIST_KEY_CFBundleDisplayName: Sand Art
+        "EXCLUDED_ARCHS[sdk=xrsimulator*]": x86_64
 schemes:
   SandArt:
     build:
@@ -48,5 +66,17 @@ schemes:
             mkdir -p "$SRCROOT/build"
             "$SRCROOT/../tools/build-apple.sh" > "$SRCROOT/build/core-build.log" 2>&1 || true
           settingsTarget: SandArt
+    run:
+      config: Debug
+  SandArtVision:
+    build:
+      targets:
+        SandArtVision: all
+      preActions:
+        - name: Build the core
+          script: |
+            mkdir -p "$SRCROOT/build"
+            "$SRCROOT/../tools/build-apple.sh" > "$SRCROOT/build/core-build.log" 2>&1 || true
+          settingsTarget: SandArtVision
     run:
       config: Debug
