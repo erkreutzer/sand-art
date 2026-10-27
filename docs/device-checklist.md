@@ -7,7 +7,7 @@ What the simulators couldn't show, collected from the "as built" sections of `do
 1. Xcode → Settings → Accounts → **+** → Apple ID. A free Personal Team is enough. Its apps stop opening after 7 days: run the script again.
 2. On the device: Settings → Privacy & Security → **Developer Mode** on (it restarts).
 3. Connect it by cable (Vision Pro: Settings → General → Remote Devices, then pair from Xcode → Window → Devices and Simulators). Trust this Mac.
-4. `tools/run-device.sh iphone` or `tools/run-device.sh vision`. The first run writes `apple/Local.xcconfig` with your team, registers the device and builds a Release app. If several devices are paired, add the device's name: `tools/run-device.sh iphone Release "Erich's iPhone"`.
+4. `tools/run-device.sh iphone` or `tools/run-device.sh vision`. The first run writes `apple/Local.xcconfig` with your team, registers the device and builds a Release app. If several devices are paired, add the device's name: `tools/run-device.sh iphone Release "My iPhone"`.
 5. First launch only: Settings → General → VPN & Device Management → your Apple ID → **Trust**, then open Sand Art.
 
 The test hooks work on a device too: `xcrun devicectl device process launch --device "<name>" <bundle id> -flipEvery 5`. The script prints the bundle ID: device builds use `art.sand.<team>.SandArt`, since a Personal Team can't share an app ID. Frame times: Console.app → the device → filter `subsystem:art.sand.SandArt` (or `art.sand.SandArtVision`).
