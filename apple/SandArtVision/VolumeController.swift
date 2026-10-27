@@ -35,6 +35,7 @@ final class VolumeController {
     let w: Int, h: Int
     let engine: SandEngine
     let renderer: SandRenderer
+    let surface: SurfaceKernel
     let model: FrameModel
     /// What you pick up: the whole toy, its origin at the axle.
     let holder = Entity()
@@ -48,7 +49,6 @@ final class VolumeController {
     private(set) var theta = 0.0
     private var anim: (from: Double, to: Double, t0: Double, dur: Double)?
     private var lastPose = Double.nan
-    private var start = CACurrentMediaTime()
     private var gravity = SIMD2<Double>(0, 1)
 
     // Test hooks (launch arguments), for the simulator, where nothing pinches.
@@ -62,10 +62,10 @@ final class VolumeController {
     private let holdTilt = UserDefaults.standard.double(forKey: "holdTilt")
     private let holdTurn = UserDefaults.standard.double(forKey: "holdTurn")
 
-    // The renderer runs in another process; replacing the sand texture
+    // The renderer runs in another process; replacing the sand textures
     // waits while it still holds older copies. If a redraw had to wait, the
-    // next ones are skipped for as long (rows and pose stay pending).
-    private var drawHold = 0.0, posePending = false, drawWaits = 0
+    // next ones are skipped for as long (changed rows stay pending).
+    private var drawHold = 0.0, drawWaits = 0
 
     private var logT0 = CACurrentMediaTime(), logFrames = 0, logMaxDt = 0.0
     private var logEngine = SandEngine.Stats()
@@ -79,12 +79,18 @@ final class VolumeController {
         let t0 = CACurrentMediaTime()
         h = Int((Self.glassHeight / Self.grain).rounded(.down))
         w = Int((Self.glassHeight * Self.glassAspect / Self.grain).rounded(.down))
-        engine = SandEngine(device: device, w: w, h: h)
+        // `-seed <n>`: the same starting picture every launch.
+        let seed = UserDefaults.standard.integer(forKey: "seed")
+        engine = SandEngine(device: device, w: w, h: h, seed: seed > 0 ? UInt32(seed) : .random(in: 0 ... .max))
         let t1 = CACurrentMediaTime()
         renderer = try SandRenderer(engine: engine, device: device, scale: Self.texelsPerGrain)
         // Typical brightness of a lit room seen through the glass, for the
         // liquid's tint (see ColourKernel.backdrop).
         renderer.backdrop = 0.5
+        // Glitter and air rims come from the room's light (SurfaceKernel).
+        renderer.kernel.highlights = 0
+        surface = try SurfaceKernel(device: device, w: w, h: h, W: engine.W, scale: Self.texelsPerGrain)
+        renderer.encodeExtra = { [surface] cb, grid, changed in surface.encode(cb, grid: grid, gridChanged: changed) }
         let t2 = CACurrentMediaTime()
         model = FrameModel(gridAspect: Double(w) / Double(h), sandTexture: renderer.resource,
                            glassHeight: Double(h) * Self.grain)
@@ -103,7 +109,7 @@ final class VolumeController {
         holder.addChild(model.root)
         content.add(holder)
 
-        await VolumeLook.apply(to: model, sandTexture: renderer.resource)
+        await VolumeLook.apply(to: model, sandTexture: renderer.resource, surface: surface)
         setUpInput()
         if holdTilt != 0 || holdTurn != 0 {
             // As if held in the hand: turned about the vertical, then rolled
@@ -114,7 +120,6 @@ final class VolumeController {
         note(String(format: "[sand] scene built in %.0f ms", (CACurrentMediaTime() - t0) * 1000))
 
         setPalette(currentPalette)
-        start = CACurrentMediaTime()
         subscription = content.subscribe(to: SceneEvents.Update.self) { [weak self] e in
             self?.tick(dt: e.deltaTime)
         }
@@ -245,11 +250,10 @@ final class VolumeController {
         gravity = [Double(down.x), Double(-down.y)]
         engine.requestFrame(dt: dt, gx: gravity.x, gy: gravity.y)
 
-        posePending = posePending || poseChanged
+        // The sand's look no longer depends on the pose: the room lights it.
         if now >= drawHold {
             let t = CACurrentMediaTime()
-            renderer.draw(glint: Float(theta * 0.05 + (now - start) * 0.4), poseChanged: posePending)
-            posePending = false
+            renderer.draw(glint: 0, poseChanged: false)
             let waited = CACurrentMediaTime() - t
             if waited > 0.008 {
                 drawHold = CACurrentMediaTime() + waited

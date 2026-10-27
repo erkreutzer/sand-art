@@ -29,6 +29,10 @@ public final class SandRenderer {
         resource = try TextureResource(from: texture)
     }
 
+    /// More GPU work on the same grid, encoded after the colour kernel while
+    /// the grid is held (gridChanged: its rows changed since the last draw).
+    public var encodeExtra: (@MainActor (_ cb: MTLCommandBuffer, _ grid: MTLBuffer, _ gridChanged: Bool) -> Void)?
+
     public func setPalette(_ p: Palette) {
         kernel.setPalette(p)
         pending = true
@@ -65,6 +69,7 @@ public final class SandRenderer {
         let blit = cb.makeBlitCommandEncoder()!
         blit.generateMipmaps(for: out)
         blit.endEncoding()
+        encodeExtra?(cb, engine.grid, changed)
         let lock = engine.gridLock
         cb.addCompletedHandler { _ in lock.signal() }
         cb.commit()

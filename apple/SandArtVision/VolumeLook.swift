@@ -12,15 +12,17 @@ import UIKit
 enum VolumeLook {
     private static let log = Logger(subsystem: "art.sand.SandArt", category: "vision")
 
-    static func apply(to model: FrameModel, sandTexture: TextureResource) async {
-        // Sand: a matte layer lit by the room, darker as it turns from the
-        // light (the web's --shade, done by real light). The texture's alpha
-        // keeps the clear liquid see-through. Seen from behind it shows its
-        // back, mirrored, with its own normal, so it is lit as a real layer.
+    static func apply(to model: FrameModel, sandTexture: TextureResource, surface: SurfaceKernel) async {
+        // Sand: a layer lit by the room, darker as it turns from the light
+        // (the web's --shade, done by real light); glitter and air pockets
+        // reflect the room (SurfaceKernel). The texture's alpha keeps the
+        // clear liquid see-through. Seen from behind it shows its back,
+        // mirrored, with its own normal, so it is lit as a real layer.
         var sand = PhysicallyBasedMaterial()
         sand.baseColor = .init(tint: .white, texture: .init(sandTexture))
-        sand.roughness = 0.9
-        sand.metallic = 0.0
+        sand.normal = .init(texture: .init(surface.normalResource))
+        sand.metallic = .init(scale: 1, texture: .init(surface.metallicResource))
+        sand.roughness = .init(scale: 1, texture: .init(surface.roughnessResource))
         sand.blending = .transparent(opacity: 1.0)
         sand.faceCulling = .back
         let L = model.layout
@@ -55,6 +57,10 @@ enum VolumeLook {
         d.positions = MeshBuffers.Positions(corners + corners)
         d.normals = MeshBuffers.Normals(Array(repeating: [0, 0, 1], count: 4) + Array(repeating: [0, 0, -1], count: 4))
         d.textureCoordinates = MeshBuffers.TextureCoordinates(uv + uv)
+        // u along x, v along y on both faces (normal maps lean the same way
+        // in the layer, whichever side it's seen from).
+        d.tangents = MeshBuffers.Tangents(Array(repeating: [1, 0, 0], count: 8))
+        d.bitangents = MeshBuffers.Tangents(Array(repeating: [0, 1, 0], count: 8))
         d.primitives = .triangles([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6])
         return try MeshResource.generate(from: [d])
     }
