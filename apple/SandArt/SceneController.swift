@@ -81,16 +81,17 @@ final class SceneController {
             var ibl = ImageBasedLightComponent(source: .single(env), intensityExponent: 1.0)
             ibl.inheritsRotation = true
             light.components.set(ibl)
-            content.add(light)
             receiveLight(model.root)
         }
         // Daylight from the window behind the viewer, high and to one side:
-        // what mostly lights the wood and steel in a real room.
+        // what mostly lights the wood and steel in a real room. It turns with
+        // the room.
         let sun = DirectionalLight()
         sun.light.intensity = 2500
         sun.light.color = UIColor(red: 1, green: 0.98, blue: 0.95, alpha: 1)
         sun.look(at: [0, 0, 0], from: [-0.5, 0.6, 1.2], relativeTo: nil)
-        content.add(sun)
+        light.addChild(sun)
+        content.add(light)
 
         note(String(format: "[sand] scene built in %.0f ms", (CACurrentMediaTime() - t0) * 1000))
         setPalette(currentPalette)

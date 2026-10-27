@@ -1,0 +1,77 @@
+<!doctype html>
+<!-- The Metal colour kernel (apple/SandKit ColourKernel) against the WebGL
+     shader it was ported from (src/render.js): the same picture in every
+     palette, pixel by pixel. Run `swift test --filter kernel` in apple/SandKit
+     first; it writes tools/compare/out/kernel-metal-*.bin. Serve the repo root
+     and open /tools/compare/kernel.html. Rows: WebGL, Metal, difference x 32. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Kernel parity</title>
+  <style>
+    body { font: 13px/1.4 ui-monospace, monospace; margin: 16px; background: #222; color: #ddd; }
+    canvas { image-rendering: pixelated; margin: 0 6px 6px 0; vertical-align: top; }
+  </style>
+</head>
+<body>
+<pre id="result">running…</pre>
+<div id="images"></div>
+<script type="module">
+import { loadWasmCore } from '../../src/core-wasm.js';
+import { Renderer, renderParams } from '../../src/render.js';
+import { palettes } from '../../src/palettes.js';
+
+const out = (p) => fetch(new URL('./out/' + p, import.meta.url));
+const scene = await (await out('kernel-metal.json')).json();
+const core = await loadWasmCore(scene.w, scene.h, scene.tps, scene.seed);
+for (const [n, gx, gy] of scene.steps)
+  for (let f = 0; f < n; f++) core.frame(1 / 60, gx, gy, 0xffffffff);
+renderParams.liquidTint = scene.liquidTint;
+
+const pw = scene.w * scene.scale, ph = scene.h * scene.scale;
+const lines = [];
+let worst = 0;
+for (let i = 0; i < palettes.length; i++) {
+  const canvas = document.createElement('canvas');
+  const r = new Renderer(canvas, core, scene.scale);
+  r.setPalette(palettes[i]);
+  r.upload([0, core.H - 1]);
+  r.draw(scene.glint);
+  const gl = r.gl, web = new Uint8Array(pw * ph * 4);
+  gl.readPixels(0, 0, pw, ph, gl.RGBA, gl.UNSIGNED_BYTE, web);
+  const metal = new Uint8Array(await (await out(`kernel-metal-${i}.bin`)).arrayBuffer());
+
+  // WebGL rows run bottom up, Metal's top down.
+  const show = [new ImageData(pw, ph), new ImageData(pw, ph), new ImageData(pw, ph)];
+  let max = 0, over1 = 0, over2 = 0;
+  for (let y = 0; y < ph; y++)
+    for (let x = 0; x < pw; x++) {
+      const m = (y * pw + x) * 4, w = ((ph - 1 - y) * pw + x) * 4;
+      let d = 0;
+      for (let c = 0; c < 4; c++) {
+        d = Math.max(d, Math.abs(web[w + c] - metal[m + c]));
+        show[0].data[m + c] = web[w + c];
+        show[1].data[m + c] = metal[m + c];
+      }
+      show[2].data.set([d * 32, d * 32, d * 32, 255], m);
+      max = Math.max(max, d);
+      if (d > 1) over1++;
+      if (d > 2) over2++;
+    }
+  worst = Math.max(worst, max);
+  lines.push(`${palettes[i].name.padEnd(8)} max diff ${max}/255, pixels off by >1: ${(100 * over1 / (pw * ph)).toFixed(3)}%, >2: ${(100 * over2 / (pw * ph)).toFixed(3)}%`);
+  const row = document.createElement('div');
+  for (const img of show) {
+    const c = document.createElement('canvas');
+    c.width = pw; c.height = ph;
+    c.getContext('2d').putImageData(img, 0, 0);
+    row.append(c);
+  }
+  document.querySelector('#images').append(row);
+}
+lines.push(`worst ${worst}/255 over ${palettes.length} palettes, ${pw}x${ph} px`);
+document.querySelector('#result').textContent = lines.join('\n');
+window.result = lines.join('\n');
+</script>
+</body>
+</html>
