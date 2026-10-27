@@ -135,11 +135,14 @@ public final class FrameModel {
     }
 
     /// theta: the flip about the axle, degrees (0 upright, 180 resting
-    /// flipped). The sand's face shades as it turns from the light, as the
-    /// web's --shade does (the sand layer is unlit, like the web canvas).
+    /// flipped), as the web's CSS rotateX: negative brings the top rail
+    /// towards the viewer. CSS's y points down, so RealityKit (y up) turns
+    /// the other way about x. The sand's face shades as it turns from the
+    /// light, as the web's --shade does (the sand layer is unlit, like the
+    /// web canvas).
     public func setPose(theta: Double) {
         let t = theta * .pi / 180
-        frame.orientation = simd_quatf(angle: Float(t), axis: [1, 0, 0])
+        frame.orientation = simd_quatf(angle: Float(-t), axis: [1, 0, 0])
         guard !litSand else { return }
         let k = 1 - 0.35 * abs(sin(t))
         sandMaterial.color.tint = UIColor(white: k, alpha: 1)

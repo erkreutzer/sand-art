@@ -180,6 +180,7 @@ What Phase 2 deferred, now in the iPhone app:
 - **The `EnvironmentResource` warning** stays: it's RealityKit's, logged even with `skyboxMode: .preserve`, and the log shows a second image-based light that isn't ours; `ImageBasedLightResource` isn't public in the iOS 27.1 SDK.
 - **Hooks:** `-holdTurn <deg>` (a pretend hand holds the toy turned, through the drag's handlers), `-seed <n>`, `-hint 1`, `-paintedSand 1`. Checked: `-holdTurn 30` sends g = (0.50, 0.87) = (sin 30°, cos 30°), and the sand piles in the lowest corner; flips unchanged; 60 fps.
 - **Device checks:** in `docs/device-checklist.md`: the turn by finger, its spring back, and glitter flashing as you tilt.
+- **Fixed on the first device run:** the flip turned the wrong way. θ is the web's CSS `rotateX` (negative brings the top rail towards you), and CSS's y points down, so `FrameModel.setPose` turns by −θ in RealityKit; a downward drag and a tap now swing the top towards you, as on the web (checked in world space: θ −12.4° puts the top rail 2.4 cm nearer the camera). And the swipe's speed is sampled over at least 8 ms: touches a millisecond apart gave speeds that threw the frame hundreds of turns on release (θ reached −113,935° in the simulator).
 
 ## Working in Claude Code
 

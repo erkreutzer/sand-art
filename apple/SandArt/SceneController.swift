@@ -249,10 +249,15 @@ final class SceneController {
             return
         }
         theta = d.theta0 - (y - d.y0) / screenLayout.fh * 180
+        // The swipe's speed over at least 8 ms, as a browser's pointer events
+        // give it: touches can arrive a millisecond apart, and a speed over
+        // that would throw the frame hundreds of turns.
         let dt = now - d.lastT
-        if dt > 0 { d.vel = d.vel * 0.6 + (-(y - d.lastY) / screenLayout.fh * 180 / dt) * 0.4 }
-        d.lastY = y
-        d.lastT = now
+        if dt >= 0.008 {
+            d.vel = d.vel * 0.6 + (-(y - d.lastY) / screenLayout.fh * 180 / dt) * 0.4
+            d.lastY = y
+            d.lastT = now
+        }
         drag = d
     }
 
