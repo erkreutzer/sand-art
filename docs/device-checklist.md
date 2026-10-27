@@ -27,6 +27,7 @@ The test hooks work on a device too: `xcrun devicectl device process launch --de
 ## iPhone Duo
 
 - [ ] Flat open: the hinge reads about 180° (Console's log line: `hinge …°`), and the tuning panel sits beside the picture, clear of the fold.
+- [ ] Flat open, held upright as a book: the sand falls down the inner screen (the log shows `panel 2007x2853 turned -90°`), and still does after folding to the cover and opening again.
 - [ ] Tent: the picture is on the upright half, the wooden base (palette, Flip, Tuning) on the flat half.
 - [ ] **Tent gravity, both ways round:** stand it as a tent, then turn it so the other half is upright. Sand must fall towards the hinge both times. If it falls away from the hinge one way, `TentGravity.sensorHalf` in `apple/SandKit/Sources/SandKit/Fold.swift` is the wrong half.
 - [ ] Folding and unfolding keeps the same sand; the picture refits without reseeding.

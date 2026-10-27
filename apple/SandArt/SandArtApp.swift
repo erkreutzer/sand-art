@@ -76,6 +76,8 @@ final class SandModel {
             hinge = HingeReading(fakeAngle: a)
             hingeKnown = true
         }
+        // For UIDevice.orientation (updateScreenAngle).
+        UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         startHooks()
     }
 
@@ -142,17 +144,35 @@ final class SandModel {
     }
 
     /// MotionSource wants the interface's turn from the device's portrait,
-    /// degrees, as screen.orientation.angle on the web.
+    /// degrees, as screen.orientation.angle on the web. The system reports it
+    /// from the panel's own portrait, and a foldable's inner panel sits square
+    /// to the device (the iPhone Duo's book view reads landscape left while
+    /// the device stands in portrait). So each panel's turn is learnt while
+    /// the device stands in portrait, as the interface's turn then, and taken
+    /// off; a phone with rotation lock held sideways learns nothing, and its
+    /// sand runs sideways on the screen, as it should.
     func updateScreenAngle() {
-        guard let o = windowScene?.effectiveGeometry.interfaceOrientation else { return }
-        let a: Double = switch o {
+        guard let s = windowScene else { return }
+        var a: Double = switch s.effectiveGeometry.interfaceOrientation {
         case .landscapeRight: 90
         case .landscapeLeft: -90
         case .portraitUpsideDown: 180
         default: 0
         }
+        let n = s.screen.nativeBounds.size, panel = "\(Int(n.width))x\(Int(n.height))"
+        // `-rotateEvery` turns the interface without the device: nothing to learn.
+        if UIDevice.current.orientation == .portrait, panelTurn[panel] != a,
+           UserDefaults.standard.double(forKey: "rotateEvery") == 0 {
+            panelTurn[panel] = a
+            note(String(format: "[sand] panel %@ turned %.0f° from the device", panel, a))
+        }
+        a -= panelTurn[panel] ?? 0
+        a -= (a / 360).rounded() * 360
         if controller?.screenAngle != a { controller?.screenAngle = a }
     }
+
+    /// Each panel's turn from the device's portrait (by its native size).
+    private var panelTurn: [String: Double] = [:]
 
     private var windowScene: UIWindowScene? {
         UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first

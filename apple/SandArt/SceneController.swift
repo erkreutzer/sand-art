@@ -392,6 +392,13 @@ final class SceneController {
                           lastG.x, lastG.y)
         if phi != 0 { line += String(format: "; turned %.1f°", phi) }
         if tentHinge != nil, let a = hinge.angle { line += String(format: "; tent, hinge %.1f°", a) }
+        // Which way the screen and the sensor are turned, for foldables.
+        if let s = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first {
+            let b = s.screen.bounds.size, n = s.screen.nativeBounds.size
+            line += String(format: "; screen %.0f° (interface %d, device %d, %.0fx%.0f of native %.0fx%.0f)",
+                           screenAngle, s.effectiveGeometry.interfaceOrientation.rawValue, UIDevice.current.orientation.rawValue,
+                           b.width, b.height, n.width, n.height)
+        }
         note(line)
         logT0 = now
         logFrames = 0
