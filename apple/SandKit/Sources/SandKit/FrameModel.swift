@@ -138,7 +138,7 @@ public final class FrameModel {
     }
 
     /// Long, slightly wavy streaks of darker late wood over the wood colour.
-    static func woodGrain(width: Int = 1024, height: Int = 128) -> CGImage? {
+    public static func woodGrain(width: Int = 1024, height: Int = 128) -> CGImage? {
         var px = [UInt8](repeating: 255, count: width * height * 4)
         let base: SIMD3<Double> = [0xd8, 0xb4, 0x8b]
         var rng = SystemRandomNumberGenerator()

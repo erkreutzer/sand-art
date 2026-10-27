@@ -9,16 +9,31 @@ import UIKit
 /// app-provided backdrop behind the glass, a bundled image-based light the
 /// glass reflects (turned as the phone tilts), and the engine fed with the
 /// phone's gravity. Flip logic and timing follow src/app.js.
+///
+/// One grid for the life of the app, like one real frame: a rotation, a fold
+/// or a panel opening beside it only refits the same frame to the view it is
+/// shown in (`resize`), never resizes or reseeds it. A view that is rebuilt
+/// (a posture change moves the picture to another place in the layout) gets
+/// the same scene installed again.
 @MainActor
 final class SceneController {
     let grid: GridSize
+    /// Glass width / height, fixed with the grid.
+    let gridAspect: Double
     let engine: SandEngine
     let renderer: SandRenderer
     let model: FrameModel
     let motion = MotionSource()
-    /// The glass's layout in points, for turning drags into flip angles.
-    let screenLayout: FrameLayout
+    /// The glass's layout in points in the current view, for turning drags
+    /// into flip angles.
+    private(set) var screenLayout: FrameLayout
+    private(set) var viewSize: CGSize
 
+    /// Holds everything the RealityView shows. Each install gets a fresh one
+    /// and the scene moves into it: the view being replaced removes its own
+    /// holder when it goes, which must not take the scene with it.
+    private var world = Entity()
+    private var built = false
     private let root = Entity()
     private let light = Entity()
     private let camera = Entity()
@@ -38,44 +53,93 @@ final class SceneController {
     private let paletteEvery = UserDefaults.standard.double(forKey: "paletteEvery")
     private lazy var lastAutoPalette = CACurrentMediaTime()
 
+    // ---------- gravity on a foldable ----------
+
+    /// Set by the view: the interface's rotation from the device's portrait,
+    /// degrees (MotionSource.screenAngle).
+    var screenAngle = 0.0 {
+        didSet { motion.screenAngle = screenAngle }
+    }
+    /// The hinge angle while the phone stands as a tent (degrees, 180 flat),
+    /// nil otherwise. The upright half's gravity is the sensor's reading turned
+    /// by it (TentGravity); the angle is smoothed, as hinge updates come at a
+    /// rate that is system policy.
+    var tentHinge: Double?
+    private var hinge = HingeSmoother()
+    /// Test hook (`-fakeTentSensor 1`, with a faked hinge): no sensor in the
+    /// simulator, so read what a sensor in the flat half of a tent would, and
+    /// turn the interface as that tent would be turned.
+    private let fakeTentSensor = UserDefaults.standard.bool(forKey: "fakeTentSensor")
+    /// Gravity last sent to the core (grid space), for the log.
+    private var lastG = SIMD2<Double>(0, 1)
+    /// Tuning panel's pause.
+    var paused = false
+
     // Frame-time log: render frames and core time over the last couple of seconds.
     private var logT0 = CACurrentMediaTime(), logFrames = 0, logMaxDt = 0.0
     private var logEngine = SandEngine.Stats()
 
-    init(viewSize: CGSize, pixelsPerPoint: Double) throws {
+    /// aspect: the glass's width / height; nil takes it from the view's shape
+    /// as the web does.
+    init(viewSize: CGSize, pixelsPerPoint: Double, aspect: Double? = nil) throws {
         let t0 = CACurrentMediaTime()
         let vw = Double(viewSize.width), vh = Double(viewSize.height)
-        grid = GridSize(viewWidth: vw, viewHeight: vh, pixelsPerPoint: pixelsPerPoint)
+        let a = aspect ?? FrameLayout.aspect(viewWidth: vw, viewHeight: vh)
+        grid = GridSize(viewWidth: vw, viewHeight: vh, aspect: a, pixelsPerPoint: pixelsPerPoint)
         let device = MTLCreateSystemDefaultDevice()!
         engine = SandEngine(device: device, w: grid.w, h: grid.h)
         let t1 = CACurrentMediaTime()
         renderer = try SandRenderer(engine: engine, device: device, scale: grid.scale)
         let t2 = CACurrentMediaTime()
-        let gridAspect = Double(grid.w) / Double(grid.h)
+        gridAspect = Double(grid.w) / Double(grid.h)
         model = FrameModel(gridAspect: gridAspect, sandTexture: renderer.resource)
         let t3 = CACurrentMediaTime()
-        // As layout() in src/app.js: fitted, then kept at the grid's exact aspect.
-        let fitted = FrameLayout.fit(viewWidth: vw, viewHeight: vh)
-        screenLayout = FrameLayout(iw: fitted.iw, ih: fitted.iw / gridAspect)
+        self.viewSize = viewSize
+        screenLayout = Self.fit(viewSize, gridAspect)
         note(String(format: "[sand] grid %dx%d scale %d (%d cells), view %.0fx%.0f pt @%.0fx; engine %.0f ms, renderer %.0f ms, model %.0f ms",
                     grid.w, grid.h, grid.scale, grid.w * grid.h, vw, vh, pixelsPerPoint, (t1 - t0) * 1000, (t2 - t1) * 1000, (t3 - t2) * 1000))
     }
 
-    /// Builds the scene into the RealityView's content and starts the loop.
+    /// As layout() in src/app.js: fitted, then kept at the grid's exact aspect.
+    private static func fit(_ size: CGSize, _ aspect: Double) -> FrameLayout {
+        let fitted = FrameLayout.fit(viewWidth: Double(size.width), viewHeight: Double(size.height), aspect: aspect)
+        return FrameLayout(iw: fitted.iw, ih: fitted.iw / aspect)
+    }
+
+    /// Builds the scene into the RealityView's content and starts the loop;
+    /// a second call (a rebuilt view) moves the same scene into the new
+    /// content.
     func install(in content: inout RealityViewCameraContent, viewSize: CGSize, dark: Bool) async {
-        let t0 = CACurrentMediaTime()
         content.camera = .virtual
         content.renderingEffects.motionBlur = .disabled
         content.renderingEffects.depthOfField = .disabled
         content.renderingEffects.cameraGrain = .disabled
+        if built {
+            let holder = Entity()
+            for e in Array(world.children) { holder.addChild(e) }
+            world = holder
+            content.add(world)
+            resize(viewSize: viewSize)
+            subscription?.cancel()
+            subscription = content.subscribe(to: SceneEvents.Update.self) { [weak self] e in
+                self?.tick(dt: e.deltaTime)
+            }
+            note(String(format: "[sand] scene installed again, view %.0fx%.0f pt", viewSize.width, viewSize.height))
+            return
+        }
+        built = true
+        let t0 = CACurrentMediaTime()
+        content.add(world)
 
         root.addChild(model.root)
-        content.add(root)
+        world.addChild(root)
+        self.viewSize = viewSize
+        screenLayout = Self.fit(viewSize, gridAspect)
         placeCamera(viewSize: viewSize)
-        content.add(camera)
+        world.addChild(camera)
         buildBackdrop(viewSize: viewSize, dark: dark)
         renderer.backdrop = dark ? 0.13 : 0.9
-        content.add(backdrop)
+        world.addChild(backdrop)
 
         if let env = await Self.studioLight() {
             var ibl = ImageBasedLightComponent(source: .single(env), intensityExponent: 1.0)
@@ -91,7 +155,7 @@ final class SceneController {
         sun.light.color = UIColor(red: 1, green: 0.98, blue: 0.95, alpha: 1)
         sun.look(at: [0, 0, 0], from: [-0.5, 0.6, 1.2], relativeTo: nil)
         light.addChild(sun)
-        content.add(light)
+        world.addChild(light)
 
         note(String(format: "[sand] scene built in %.0f ms", (CACurrentMediaTime() - t0) * 1000))
         setPalette(currentPalette)
@@ -103,15 +167,36 @@ final class SceneController {
         }
     }
 
+    /// The same frame refitted to a new view size (a rotation, a fold, a
+    /// panel opening beside it): camera, backdrop and drag scale follow; the
+    /// grid stays as it is.
+    func resize(viewSize: CGSize) {
+        guard viewSize.width > 0, viewSize.height > 0 else { return }
+        let changed = viewSize != self.viewSize
+        self.viewSize = viewSize
+        screenLayout = Self.fit(viewSize, gridAspect)
+        guard built else { return }
+        placeCamera(viewSize: viewSize)
+        resizeBackdrop(viewSize: viewSize)
+        if changed {
+            note(String(format: "[sand] refit to %.0fx%.0f pt (glass %.0fx%.0f pt), grid still %dx%d",
+                        viewSize.width, viewSize.height, screenLayout.iw, screenLayout.ih, grid.w, grid.h))
+        }
+    }
+
     // ---------- palette ----------
 
     var paletteIndex: Int = min(Palette.all.count - 1, max(0, UserDefaults.standard.integer(forKey: "sand.palette")))
     var currentPalette: Palette { Palette.all[paletteIndex] }
 
+    /// Tells the pickers.
+    var onPalette: ((Int) -> Void)?
+
     func setPalette(_ p: Palette) {
         paletteIndex = Palette.all.firstIndex(of: p) ?? 0
         UserDefaults.standard.set(paletteIndex, forKey: "sand.palette")
         renderer.setPalette(p)
+        onPalette?(paletteIndex)
     }
 
     // ---------- flipping (src/app.js) ----------
@@ -173,9 +258,10 @@ final class SceneController {
 
         // Gravity in grid space: the phone's down on the screen (upright where
         // there's no sensor), turned by the flip.
-        let g0 = motion.gravity ?? [0, 1]
+        let g0 = screenGravity(dt: dt)
         let tr = theta * .pi / 180
-        engine.requestFrame(dt: dt, gx: g0.x, gy: g0.y * cos(tr))
+        lastG = SIMD2(g0.x, g0.y * cos(tr))
+        engine.requestFrame(dt: dt, gx: lastG.x, gy: lastG.y, paused: paused)
 
         // Test hooks for the simulator, where nothing can touch the screen:
         // `-flipEvery <s>` flips and `-paletteEvery <s>` steps the palette on
@@ -200,6 +286,23 @@ final class SceneController {
         logFrame(dt: rawDt)
     }
 
+    /// The phone's down on the screen. Standing as a tent, the picture is on
+    /// the upright half, which may not be the half with the sensor: its
+    /// gravity is the reading turned about the hinge.
+    private func screenGravity(dt: Double) -> SIMD2<Double> {
+        guard let target = tentHinge else {
+            _ = hinge.step(towards: 180, dt: dt)
+            return motion.gravity ?? [0, 1]
+        }
+        let angle = hinge.step(towards: target, dt: dt)
+        if fakeTentSensor, motion.deviceGravity == nil {
+            let up = TentGravity.upright(sensor: [0, 0, -1], hingeAngle: angle)
+            return TentGravity.toScreen(up, screenAngle: TentGravity.sensorHalf == .left ? 90 : -90)
+        }
+        guard let g = motion.deviceGravity else { return [0, 1] }
+        return TentGravity.toScreen(TentGravity.upright(sensor: g, hingeAngle: angle), screenAngle: screenAngle)
+    }
+
     /// The room the glass reflects stays put while the phone turns in it.
     /// Scene axes are the screen's (x right, y up, z out), so the room turns
     /// by the inverse of the phone's turn since the app started.
@@ -220,9 +323,11 @@ final class SceneController {
         guard now - logT0 >= 2 else { return }
         let s = engine.stats, secs = now - logT0
         let frames = s.frames - logEngine.frames, ticks = s.totalTicks - logEngine.totalTicks
-        let line = String(format: "[sand] %.1f fps (worst %.1f ms); core %.1f frames/s, %.1f ticks/s, %.2f ms per core frame, %.3f ms/tick, %d moves",
+        var line = String(format: "[sand] %.1f fps (worst %.1f ms); core %.1f frames/s, %.1f ticks/s, %.2f ms per core frame, %.3f ms/tick, %d moves; g %.2f,%.2f",
                           Double(logFrames) / secs, logMaxDt * 1000, Double(frames) / secs, Double(ticks) / secs,
-                          frames > 0 ? (s.totalCoreMs - logEngine.totalCoreMs) / Double(frames) : 0, s.perTickMs, s.moves)
+                          frames > 0 ? (s.totalCoreMs - logEngine.totalCoreMs) / Double(frames) : 0, s.perTickMs, s.moves,
+                          lastG.x, lastG.y)
+        if tentHinge != nil, let a = hinge.angle { line += String(format: "; tent, hinge %.1f°", a) }
         note(line)
         logT0 = now
         logFrames = 0
@@ -231,7 +336,7 @@ final class SceneController {
     }
 
     /// To stdout and the unified log (`log show --info`), for checking timing.
-    private func note(_ line: String) {
+    func note(_ line: String) {
         print(line)
         log.notice("\(line, privacy: .public)")
     }
@@ -255,17 +360,23 @@ final class SceneController {
     /// A softly lit wall well behind the frame (the web page's background),
     /// so the clear liquid reads as see-through.
     private func buildBackdrop(viewSize: CGSize, dark: Bool) {
+        var m = UnlitMaterial(applyPostProcessToneMap: false)
+        if let img = Self.wallImage(dark: dark), let tex = try? TextureResource(image: img, options: .init(semantic: .color)) {
+            m.color = .init(tint: .white, texture: .init(tex))
+        }
+        backdrop.model = ModelComponent(mesh: .generatePlane(width: 1, height: 1), materials: [m])
+        resizeBackdrop(viewSize: viewSize)
+    }
+
+    /// The wall fills the view whatever its shape (a unit plane, scaled).
+    private func resizeBackdrop(viewSize: CGSize) {
         let L = model.layout
         let z = -1.2 * L.fh
         let dist = 4 * L.fh - z
         let k = L.ih / screenLayout.ih
         let h = Double(viewSize.height) * k * dist / (4 * L.fh) * 1.15
         let w = h * Double(viewSize.width / viewSize.height)
-        var m = UnlitMaterial(applyPostProcessToneMap: false)
-        if let img = Self.wallImage(dark: dark), let tex = try? TextureResource(image: img, options: .init(semantic: .color)) {
-            m.color = .init(tint: .white, texture: .init(tex))
-        }
-        backdrop.model = ModelComponent(mesh: .generatePlane(width: Float(w), height: Float(h)), materials: [m])
+        backdrop.scale = [Float(w), Float(h), 1]
         backdrop.position = [0, camera.position.y, Float(z)]
     }
 
