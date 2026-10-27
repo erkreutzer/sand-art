@@ -14,6 +14,8 @@ public final class FrameModel {
     /// Turns about x on the axle; the posts and base stay put.
     public let frame = Entity()
     public let sand: ModelEntity
+    /// The two glass panes, front then back.
+    public private(set) var panes: [ModelEntity] = []
     public let layout: FrameLayout
     private var sandMaterial: UnlitMaterial
 
@@ -61,6 +63,7 @@ public final class FrameModel {
             let p = ModelEntity(mesh: pane, materials: [Self.glassMaterial()])
             p.position = [0, 0, s * f(halfGap + glassT / 2)]
             frame.addChild(p)
+            panes.append(p)
         }
         root.addChild(frame)
 

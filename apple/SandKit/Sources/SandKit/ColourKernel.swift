@@ -16,6 +16,13 @@ public final class ColourKernel {
 
     public var liquidTint: Float = 1 { didSet { applyLiquid() } }
     public var backdrop: Float = 0.9 { didSet { applyLiquid() } }
+    /// How much of the web's painted glitter twinkle and air rims to draw
+    /// (1, as the web). Vision Pro sets 0: there the room's real light makes
+    /// them (SurfaceKernel in the app).
+    public var highlights: Float {
+        get { uniforms.highlights }
+        set { uniforms.highlights = newValue }
+    }
     private var liquidAlpha: Float = 1, liquidColour: Float = 1
 
     struct Uniforms {
@@ -25,6 +32,7 @@ public final class ColourKernel {
         var scale: UInt32 = 1
         var glint: Float = 0
         var liquidAlpha: Float = 1
+        var highlights: Float = 1
     }
 
     /// w x h grains, W the padded grid width, scale texels per grain.
@@ -84,6 +92,7 @@ public final class ColourKernel {
         uint scale;      // texels per grain
         float glint;
         float liquidAlpha;   // the liquid is see-through; sand and air are not
+        float highlights;    // painted twinkle and rims: 1 as the web, 0 where real light does them
     };
 
     static float hash(float2 p) {
@@ -122,7 +131,7 @@ public final class ColourKernel {
             if (p.a < 0.5) {
                 // Glitter flake: twinkles as the frame turns.
                 float tw = pow(max(0.0, sin(s * 97.0 + u.glint * (1.0 + s * 3.0))), 24.0);
-                col = mix(col, float3(1.0, 0.98, 0.9), tw * 0.85);
+                col = mix(col, float3(1.0, 0.98, 0.9), tw * 0.85 * u.highlights);
             }
         } else if (t == 1) {
             // Air: silvery, with a soft meniscus only where a pocket has some
@@ -132,7 +141,7 @@ public final class ColourKernel {
             int nAir = int(up == 1) + int(dn == 1) + int(lf == 1) + int(rt == 1);
             bool edge = up == 0 || dn == 0 || lf == 0 || rt == 0;
             col = u.air.rgb * (0.97 + 0.05 * n);
-            if (edge && nAir >= 2 && (up == 1 || dn == 1)) col = mix(col, u.rim.rgb, 0.55);
+            if (edge && nAir >= 2 && (up == 1 || dn == 1)) col = mix(col, u.rim.rgb, 0.55 * u.highlights);
         } else {
             // Clear liquid: a faint tint over whatever is behind the frame.
             col = mix(u.liquidTop.rgb, u.liquidBot.rgb, uv.y) * (0.985 + 0.02 * n);

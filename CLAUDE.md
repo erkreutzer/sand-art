@@ -15,6 +15,7 @@ Work on the shared core, iPhone, iPhone Duo and Vision Pro follows `docs/native-
 - `swift test` in `apple/SandKit`: native core vs the web's hashes (update them from `run.mjs` after a physics change), plus the Metal kernel's output for `tools/compare/kernel.html` (open it from the static server; should be within 1/255).
 - Simulator: `xcrun simctl install booted <app>`, `xcrun simctl launch booted art.sand.SandArt -flipEvery 5 -paletteEvery 7` (test hooks; `-sand.palette N` picks one); frame times every 2 s in `xcrun simctl spawn booted log show --info --predicate 'subsystem == "art.sand.SandArt"'`.
 - iPhone Duo hooks (the simulator can't move the hinge): `-postureEvery 15 -fakeTentSensor 1` cycles open / tent / shut, `-fakeHinge <deg>` holds one angle, `-rotateEvery <s>` turns the interface, `-openTuning 1` opens the tuning panel. The Duo simulator shows its cover display (`--display=1` for `simctl io screenshot`).
+- Vision Pro: `tools/build-vision.sh [Debug|Release]` (same steps, `SandArtVision` scheme, visionOS simulator). Runtime: `xcodebuild -downloadPlatform visionOS`, then an "Apple Vision Pro" simulator. Launch `art.sand.SandArtVision`; hooks as the iPhone's plus `-dragFlipEvery <s>` (a pretend pinch-swing through the gesture's handlers), `-holdTilt <deg>` / `-holdTurn <deg>` (the toy held rolled / turned) and `-seed <n>` (the same starting picture); the frame-time line also prints θ and the gravity sent to the core.
 
 ## Physics rules
 
