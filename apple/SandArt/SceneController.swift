@@ -43,6 +43,14 @@ final class SceneController {
 
     // Flip about the stand's axle, degrees, as theta in src/app.js.
     private(set) var theta = 0.0
+    // The whole toy turned in the picture plane by a hand, degrees clockwise
+    // as seen, as phi in src/app.js; let go, it rocks back upright.
+    private(set) var phi = 0.0
+    private var turn: (phi0: Double, a0: Double)?
+    private var lastPhi = Double.nan
+    /// `-holdTurn <deg>`: a pretend hand holds the toy turned (a test hook,
+    /// through the drag's own handlers; the simulator can't touch).
+    private let holdTurn = UserDefaults.standard.double(forKey: "holdTurn")
     private var anim: (from: Double, to: Double, t0: Double, dur: Double)?
     private var lastPose = Double.nan
     private var start = CACurrentMediaTime()
@@ -239,6 +247,30 @@ final class SceneController {
         animate(to: target, dur: min(900, 250 + abs(target - theta) * 4))
     }
 
+    /// Drag-to-turn: the toy follows the finger's angle about the axle
+    /// (points in the picture view).
+    func turnChanged(start: CGPoint, at p: CGPoint) {
+        let c = axleOnScreen
+        if turn == nil {
+            turn = (phi, atan2(Double(start.y - c.y), Double(start.x - c.x)))
+        }
+        guard let t = turn else { return }
+        var a = atan2(Double(p.y - c.y), Double(p.x - c.x)) - t.a0
+        if a > .pi { a -= 2 * .pi }
+        if a < -.pi { a += 2 * .pi }
+        phi = t.phi0 + a * 180 / .pi
+    }
+
+    func turnEnded() { turn = nil }
+
+    /// The axle in the picture view: the camera sits `cy` above it, looking
+    /// straight on, at the frame's scale.
+    private var axleOnScreen: CGPoint {
+        let k = model.layout.ih / screenLayout.ih // metres per point
+        let cy = Double(camera.position.y)
+        return CGPoint(x: viewSize.width / 2, y: viewSize.height / 2 + CGFloat(cy / k))
+    }
+
     /// New sand at the top as you see it, whichever way up the frame is.
     func reseed() { engine.reseed(upsideDown: cos(theta * .pi / 180) < 0) }
 
@@ -256,11 +288,19 @@ final class SceneController {
             }
         }
 
+        if holdTurn != 0 {
+            let c = axleOnScreen, r = 0.3 * screenLayout.fw, a = holdTurn * .pi / 180
+            turnChanged(start: CGPoint(x: c.x + r, y: c.y), at: CGPoint(x: c.x + r * cos(a), y: c.y + r * sin(a)))
+        } else if turn == nil {
+            phi *= exp(-dt * 3.5)
+            if abs(phi) < 0.01 { phi = 0 }
+        }
+
         // Gravity in grid space: the phone's down on the screen (upright where
-        // there's no sensor), turned by the flip.
+        // there's no sensor), turned with the toy, then by the flip.
         let g0 = screenGravity(dt: dt)
-        let tr = theta * .pi / 180
-        lastG = SIMD2(g0.x, g0.y * cos(tr))
+        let pr = phi * .pi / 180, tr = theta * .pi / 180
+        lastG = SIMD2(g0.x * cos(pr) + g0.y * sin(pr), (-g0.x * sin(pr) + g0.y * cos(pr)) * cos(tr))
         engine.requestFrame(dt: dt, gx: lastG.x, gy: lastG.y, paused: paused)
 
         // Test hooks for the simulator, where nothing can touch the screen:
@@ -276,12 +316,14 @@ final class SceneController {
             note("[sand] palette \(currentPalette.name)")
         }
 
-        let poseChanged = theta != lastPose
+        let poseChanged = theta != lastPose || phi != lastPhi
         if poseChanged {
+            if theta != lastPose { model.setPose(theta: theta) }
             lastPose = theta
-            model.setPose(theta: theta)
+            lastPhi = phi
+            model.root.orientation = simd_quatf(angle: Float(-phi * .pi / 180), axis: [0, 0, 1])
         }
-        renderer.draw(glint: Float(theta * 0.05 + (now - start) * 0.4), poseChanged: poseChanged)
+        renderer.draw(glint: Float(theta * 0.05 + phi * 0.08 + (now - start) * 0.4), poseChanged: poseChanged)
         turnReflections()
         logFrame(dt: rawDt)
     }
@@ -327,6 +369,7 @@ final class SceneController {
                           Double(logFrames) / secs, logMaxDt * 1000, Double(frames) / secs, Double(ticks) / secs,
                           frames > 0 ? (s.totalCoreMs - logEngine.totalCoreMs) / Double(frames) : 0, s.perTickMs, s.moves,
                           lastG.x, lastG.y)
+        if phi != 0 { line += String(format: "; turned %.1f°", phi) }
         if tentHinge != nil, let a = hinge.angle { line += String(format: "; tent, hinge %.1f°", a) }
         note(line)
         logT0 = now

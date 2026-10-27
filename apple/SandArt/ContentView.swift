@@ -119,8 +119,11 @@ struct PictureView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.colorScheme) private var colorScheme
     @State private var dragMode: DragMode?
+    /// Shown until the first touch, once per install, as the web's hint
+    /// (`-hint 1` shows it again).
+    @AppStorage("sand.hinted") private var hinted = false
 
-    enum DragMode { case flip, other }
+    enum DragMode { case flip, turn }
 
     var body: some View {
         GeometryReader { geo in
@@ -130,6 +133,17 @@ struct PictureView: View {
                 }
                 .gesture(flipGesture(controller))
                 .onChange(of: geo.size) { controller.resize(viewSize: geo.size) }
+                .overlay(alignment: .bottom) {
+                    Text("Tap to flip · drag to turn · tilt to pour")
+                        .font(.subheadline)
+                        .tracking(0.3)
+                        .foregroundStyle(colorScheme == .dark ? Color(white: 0.85) : Color(white: 0.2))
+                        .opacity(hinted ? 0 : 0.8)
+                        .animation(.easeInOut(duration: 1.2).delay(1.5), value: hinted)
+                        .padding(.bottom, 132)
+                        .allowsHitTesting(false)
+                }
+                .onAppear { if UserDefaults.standard.bool(forKey: "hint") { hinted = false } }
             } else {
                 Color.clear.task(id: geo.size) {
                     // A hinged phone gets a landscape frame, so wait (briefly)
@@ -144,23 +158,30 @@ struct PictureView: View {
         }
     }
 
-    /// Tap to flip; drag up or down to flip by hand (src/app.js).
+    /// Tap to flip; drag up or down to flip by hand, sideways to turn the
+    /// toy about its middle (src/app.js).
     private func flipGesture(_ c: SceneController) -> some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { v in
                 let t = v.translation
                 if dragMode == nil, hypot(t.width, t.height) > 8 {
-                    dragMode = abs(t.height) > abs(t.width) * 1.2 ? .flip : .other
+                    dragMode = abs(t.height) > abs(t.width) * 1.2 ? .flip : .turn
+                    hinted = true
                 }
-                if dragMode == .flip { c.dragChanged(y: v.location.y) }
+                switch dragMode {
+                case .flip: c.dragChanged(y: v.location.y)
+                case .turn: c.turnChanged(start: v.startLocation, at: v.location)
+                case nil: break
+                }
             }
             .onEnded { _ in
                 switch dragMode {
                 case nil: c.flip()
                 case .flip: c.dragEnded()
-                case .other: break
+                case .turn: c.turnEnded()
                 }
                 dragMode = nil
+                hinted = true
             }
     }
 }
@@ -177,7 +198,10 @@ struct StandBase: View {
         VStack(spacing: 16) {
             PalettePicker()
             HStack(spacing: 14) {
-                Button { app.controller?.flip() } label: {
+                Button {
+                    app.controller?.flip()
+                    UserDefaults.standard.set(true, forKey: "sand.hinted")
+                } label: {
                     Label("Flip", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
                         .padding(.horizontal, 18).padding(.vertical, 10)
                         .background(.ultraThinMaterial, in: Capsule())
