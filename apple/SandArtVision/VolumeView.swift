@@ -10,15 +10,26 @@ struct VolumeView: View {
     var body: some View {
         if let controller {
             let size = VolumeController.volumeSize
-            RealityView { content in
-                await controller.install(in: &content)
+            GeometryReader3D { proxy in
+                RealityView { content in
+                    await controller.install(in: &content)
+                }
+                .gesture(spinGesture(controller))
+                .onChange(of: proxy.size, initial: true) { _, s in
+                    controller.fit(to: SIMD3(Double(s.width), Double(s.height), Double(s.depth)) / metre)
+                }
             }
-            .gesture(spinGesture(controller))
-            // Fixed at the real size: a sand picture doesn't grow or shrink.
-            .frame(width: size.x * metre, height: size.y * metre)
-            .frame(depth: size.z * metre)
-            .ornament(attachmentAnchor: .scene(.bottomFront), contentAlignment: .top) {
-                Controls(palette: $palette) { controller.setPalette(Palette.all[$0]) } flip: { controller.flip() }
+            // Opens at the real size; drag the corner to make it from half to
+            // twice that, and the toy scales with it.
+            .frame(minWidth: size.x * metre / 2, idealWidth: size.x * metre, maxWidth: size.x * metre * 2,
+                   minHeight: size.y * metre / 2, idealHeight: size.y * metre, maxHeight: size.y * metre * 2)
+            .frame(minDepth: size.z * metre / 2, idealDepth: size.z * metre, maxDepth: size.z * metre * 2)
+            // The system's volume toolbar, which it lays out clear of the
+            // window bar (an ornament at the bottom front sat on top of it).
+            .toolbar {
+                ToolbarItemGroup(placement: .bottomOrnament) {
+                    Controls(palette: $palette) { controller.setPalette(Palette.all[$0]) } flip: { controller.flip() }
+                }
             }
             .volumeBaseplateVisibility(.visible)
             .onAppear { palette = controller.paletteIndex }
@@ -76,8 +87,5 @@ struct Controls: View {
                 Label("Flip", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 10)
-        .glassBackgroundEffect()
     }
 }

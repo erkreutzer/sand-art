@@ -39,6 +39,9 @@ final class VolumeController {
     let model: FrameModel
     /// What you pick up: the whole toy, its origin at the axle.
     let holder = Entity()
+    /// Scales the toy with the volume when you resize it (`fit(to:)`); 1 is
+    /// the real size the volume opens at.
+    let fit = Entity()
     /// Positions for the spin gesture are taken in this space (the axle's).
     var axleSpace: Entity { model.root }
 
@@ -107,7 +110,8 @@ final class VolumeController {
         // The base stands on the volume's floor.
         holder.position = [0, Float(-Self.volumeSize.y / 2 + L.fh / 2 + L.gap + L.baseh), 0]
         holder.addChild(model.root)
-        content.add(holder)
+        fit.addChild(holder)
+        content.add(fit)
 
         await VolumeLook.apply(to: model, sandTexture: renderer.resource, surface: surface)
         setUpInput()
@@ -144,6 +148,17 @@ final class VolumeController {
         m.releaseBehavior = .reset
         m.dynamics.scalingBehavior = .none
         holder.components.set(m)
+    }
+
+    /// The volume's size now, metres: the toy scales by the tightest axis and
+    /// its base stays on the volume's floor.
+    func fit(to size: SIMD3<Double>) {
+        let k = size / Self.volumeSize
+        let s = max(0.1, min(k.x, k.y, k.z))
+        fit.scale = SIMD3(repeating: Float(s))
+        fit.position = [0, Float(-size.y / 2 + s * Self.volumeSize.y / 2), 0]
+        note(String(format: "[sand] volume %.0f x %.0f x %.0f cm, toy at %.2fx its real size",
+                    size.x * 100, size.y * 100, size.z * 100, s))
     }
 
     func isOnFrame(_ e: Entity) -> Bool {

@@ -35,12 +35,13 @@ The test hooks work on a device too: `xcrun devicectl device process launch --de
 ## Vision Pro
 
 - [ ] The volume opens on a real surface at its true size (glass about 33 × 24 cm) and stays that size as you walk away.
+- [ ] The window bar is clear of the controls and moves the volume; dragging a corner resizes it from half to twice the real size, the toy scaling with it and staying on the floor.
 - [ ] You see the room through the clear liquid; its tint looks like the web's.
 - [ ] The panes are barely visible face-on and show a clear sheen at a shallow angle.
 - [ ] Pinch and drag on the frame spins it about its axle; let go and it settles on the nearer side, carried by the swing.
 - [ ] A pinch without moving flips it.
 - [ ] Picking up the stand moves the whole toy, and tilting it moves the sand sideways. Pinching the frame doesn't also pick up the stand.
-- [ ] The ornament's palette and Flip buttons work.
+- [ ] The toolbar's palette and Flip buttons work.
 - [ ] Glitter flashes as your head moves (each eye on its own), and air-pocket rims catch the light after a few flips.
 - [ ] The sand looks right in both a dim and a bright room.
 - [ ] Frame times in Console, and whether the log reports texture waits (`replace` waited); no heat or memory warnings after five minutes.
