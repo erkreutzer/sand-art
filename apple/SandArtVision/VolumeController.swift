@@ -58,8 +58,14 @@ final class VolumeController {
     private lazy var lastAutoPalette = CACurrentMediaTime()
     private let dragFlipEvery = UserDefaults.standard.double(forKey: "dragFlipEvery")
     private lazy var lastAutoDrag = CACurrentMediaTime()
-    private var autoDrag: Double? // start time of a synthetic pinch-drag
+    private var autoDrag: (t0: Double, a0: Double)? // a pretend pinch-drag: start time, angle
     private let holdTilt = UserDefaults.standard.double(forKey: "holdTilt")
+    private let holdTurn = UserDefaults.standard.double(forKey: "holdTurn")
+
+    // The renderer runs in another process; replacing the sand texture
+    // waits while it still holds older copies. If a redraw had to wait, the
+    // next ones are skipped for as long (rows and pose stay pending).
+    private var drawHold = 0.0, posePending = false, drawWaits = 0
 
     private var logT0 = CACurrentMediaTime(), logFrames = 0, logMaxDt = 0.0
     private var logEngine = SandEngine.Stats()
@@ -99,9 +105,11 @@ final class VolumeController {
 
         await VolumeLook.apply(to: model, sandTexture: renderer.resource)
         setUpInput()
-        if holdTilt != 0 {
-            // As if held tilted in the hand: rolled about the line of sight.
-            holder.orientation = simd_quatf(angle: Float(holdTilt * .pi / 180), axis: [0, 0, 1])
+        if holdTilt != 0 || holdTurn != 0 {
+            // As if held in the hand: turned about the vertical, then rolled
+            // about the line of sight.
+            holder.orientation = simd_quatf(angle: Float(holdTurn * .pi / 180), axis: [0, 1, 0])
+                * simd_quatf(angle: Float(holdTilt * .pi / 180), axis: [0, 0, 1])
         }
         note(String(format: "[sand] scene built in %.0f ms", (CACurrentMediaTime() - t0) * 1000))
 
@@ -237,14 +245,25 @@ final class VolumeController {
         gravity = [Double(down.x), Double(-down.y)]
         engine.requestFrame(dt: dt, gx: gravity.x, gy: gravity.y)
 
-        renderer.draw(glint: Float(theta * 0.05 + (now - start) * 0.4), poseChanged: poseChanged)
+        posePending = posePending || poseChanged
+        if now >= drawHold {
+            let t = CACurrentMediaTime()
+            renderer.draw(glint: Float(theta * 0.05 + (now - start) * 0.4), poseChanged: posePending)
+            posePending = false
+            let waited = CACurrentMediaTime() - t
+            if waited > 0.008 {
+                drawHold = CACurrentMediaTime() + waited
+                drawWaits += 1
+            }
+        }
         logFrame(dt: rawDt)
     }
 
     /// `-flipEvery <s>` flips and `-paletteEvery <s>` steps the palette, as
     /// the ornament's buttons do; `-dragFlipEvery <s>` swings the frame by a
     /// pretend pinch on its top rail (through the gesture's own handlers);
-    /// `-holdTilt <deg>` holds the toy rolled, as in the hand.
+    /// `-holdTilt <deg>` holds the toy rolled and `-holdTurn <deg>` turned
+    /// about the vertical, as in the hand.
     private func runTestHooks(now: Double) {
         if flipEvery > 0, now - lastAutoFlip >= flipEvery {
             lastAutoFlip = now
@@ -256,13 +275,13 @@ final class VolumeController {
             note("[sand] palette \(currentPalette.name)")
         }
         if dragFlipEvery > 0, autoDrag == nil, now - lastAutoDrag >= dragFlipEvery {
-            autoDrag = now
+            // The top rail's angle about the axle, in the axle's space.
+            autoDrag = (now, atan2(0.01, model.layout.fh / 2) + theta * .pi / 180)
             note("[sand] pretend pinch on the top rail")
         }
-        if let t0 = autoDrag {
+        if let (t0, a0) = autoDrag {
             // Push the top rail away through 110° in 0.35 s, then let go.
             let r = Float(model.layout.fh / 2), t = now - t0
-            let a0 = atan2(0.01, Double(r)) + theta * .pi / 180
             let a = a0 - min(1, t / 0.35) * 110 * .pi / 180
             spinChanged(at: [0, r * Float(cos(a)), r * Float(sin(a))])
             if t >= 0.35 {
@@ -280,15 +299,16 @@ final class VolumeController {
         guard now - logT0 >= 2 else { return }
         let s = engine.stats, secs = now - logT0
         let frames = s.frames - logEngine.frames, ticks = s.totalTicks - logEngine.totalTicks
-        let line = String(format: "[sand] %.1f fps (worst %.1f ms); core %.1f frames/s, %.1f ticks/s, %.2f ms per core frame, %.3f ms/tick, %d moves; theta %.0f, g (%.2f, %.2f)",
+        let line = String(format: "[sand] %.1f fps (worst %.1f ms); core %.1f frames/s, %.1f ticks/s, %.2f ms per core frame, %.3f ms/tick, %d moves; theta %.0f, g (%.2f, %.2f); %d texture waits",
                           Double(logFrames) / secs, logMaxDt * 1000, Double(frames) / secs, Double(ticks) / secs,
                           frames > 0 ? (s.totalCoreMs - logEngine.totalCoreMs) / Double(frames) : 0, s.perTickMs, s.moves,
-                          theta, gravity.x, gravity.y)
+                          theta, gravity.x, gravity.y, drawWaits)
         note(line)
         logT0 = now
         logFrames = 0
         logMaxDt = 0
         logEngine = s
+        drawWaits = 0
     }
 
     /// To stdout and the unified log (`log show --info`), for checking timing.
