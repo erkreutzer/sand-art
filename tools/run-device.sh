@@ -17,13 +17,20 @@ config="${2:-Release}"
 want="$3"
 local_cfg="$root/apple/Local.xcconfig"
 
-# The team: Local.xcconfig, else the one team of the Apple ID signed in to Xcode.
+# The team: Local.xcconfig, else the one team of the Apple ID signed in to Xcode,
+# else (Xcode 27 no longer lists teams in its defaults) the team (OU) of the
+# Apple Development certificates in the keychain.
 if ! grep -qE '^DEVELOPMENT_TEAM *= *[A-Z0-9]{10}' "$local_cfg" 2>/dev/null; then
   teams=$(defaults read com.apple.dt.Xcode IDEProvisioningTeamByIdentifier 2>/dev/null \
     | grep -oE 'teamID = "?[A-Z0-9]{10}' | grep -oE '[A-Z0-9]{10}$' | sort -u)
+  if [ -z "$teams" ]; then
+    teams=$(security find-certificate -a -c "Apple Development" -p 2>/dev/null \
+      | awk '/BEGIN CERT/{c=""} {c=c $0 "\n"} /END CERT/{printf "%s", c | "openssl x509 -noout -subject -nameopt multiline"; close("openssl x509 -noout -subject -nameopt multiline")}' \
+      | grep -E 'organizationalUnitName' | grep -oE '[A-Z0-9]{10}$' | sort -u)
+  fi
   n=$(printf '%s' "$teams" | grep -c . || true)
   if [ "$n" -eq 0 ]; then
-    echo "No signing team: add your Apple ID in Xcode → Settings → Accounts, then run this again." >&2
+    echo "No signing team. In Xcode → Settings → Accounts, select your Apple ID, then Manage Certificates… → + → Apple Development, and run this again (or put the team in apple/Local.xcconfig)." >&2
     exit 1
   elif [ "$n" -gt 1 ]; then
     echo "Several teams ($(echo $teams)): put one in apple/Local.xcconfig (see Local.xcconfig.example)." >&2
