@@ -100,12 +100,47 @@ public final class FrameModel {
         root.addChild(base)
     }
 
+    /// Whether the sand layer is a lit surface (`useLitSand`): then the
+    /// scene's light shades it and `setPose` only turns the frame.
+    public private(set) var litSand = false
+
+    /// Makes the sand layer a lit surface with this material, as two faces
+    /// back to back so its back is lit as a real layer's.
+    public func useLitSand(_ material: PhysicallyBasedMaterial) {
+        litSand = true
+        if let mesh = try? Self.twoSidedPlane(width: Float(layout.iw), height: Float(layout.ih)) {
+            sand.model = ModelComponent(mesh: mesh, materials: [material])
+        } else {
+            sand.model?.materials = [material]
+        }
+    }
+
+    /// The sand layer as two faces back to back, sharing the texture: the
+    /// back face's normal points out of the back and its texture reads
+    /// mirrored, as the back of a real sand layer does.
+    public static func twoSidedPlane(width: Float, height: Float) throws -> MeshResource {
+        let x = width / 2, y = height / 2
+        let corners: [SIMD3<Float>] = [[-x, -y, 0], [x, -y, 0], [x, y, 0], [-x, y, 0]]
+        let uv: [SIMD2<Float>] = [[0, 0], [1, 0], [1, 1], [0, 1]]
+        var d = MeshDescriptor(name: "sand")
+        d.positions = MeshBuffers.Positions(corners + corners)
+        d.normals = MeshBuffers.Normals(Array(repeating: [0, 0, 1], count: 4) + Array(repeating: [0, 0, -1], count: 4))
+        d.textureCoordinates = MeshBuffers.TextureCoordinates(uv + uv)
+        // u along x, v along y on both faces (normal maps lean the same way
+        // in the layer, whichever side it's seen from).
+        d.tangents = MeshBuffers.Tangents(Array(repeating: [1, 0, 0], count: 8))
+        d.bitangents = MeshBuffers.Tangents(Array(repeating: [0, 1, 0], count: 8))
+        d.primitives = .triangles([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6])
+        return try MeshResource.generate(from: [d])
+    }
+
     /// theta: the flip about the axle, degrees (0 upright, 180 resting
     /// flipped). The sand's face shades as it turns from the light, as the
     /// web's --shade does (the sand layer is unlit, like the web canvas).
     public func setPose(theta: Double) {
         let t = theta * .pi / 180
         frame.orientation = simd_quatf(angle: Float(t), axis: [1, 0, 0])
+        guard !litSand else { return }
         let k = 1 - 0.35 * abs(sin(t))
         sandMaterial.color.tint = UIColor(white: k, alpha: 1)
         sand.model?.materials = [sandMaterial]

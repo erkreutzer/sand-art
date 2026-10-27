@@ -23,6 +23,10 @@ final class SceneController {
     let engine: SandEngine
     let renderer: SandRenderer
     let model: FrameModel
+    /// Glitter and air rims lit by the scene's light, as on Vision Pro
+    /// (SurfaceKernel), in place of the web's painted twinkle and rims.
+    /// `-paintedSand 1` keeps the painted ones (and the unlit layer).
+    let surface: SurfaceKernel?
     let motion = MotionSource()
     /// The glass's layout in points in the current view, for turning drags
     /// into flip angles.
@@ -95,9 +99,20 @@ final class SceneController {
         let a = aspect ?? FrameLayout.aspect(viewWidth: vw, viewHeight: vh)
         grid = GridSize(viewWidth: vw, viewHeight: vh, aspect: a, pixelsPerPoint: pixelsPerPoint)
         let device = MTLCreateSystemDefaultDevice()!
-        engine = SandEngine(device: device, w: grid.w, h: grid.h)
+        // `-seed <n>`: the same starting picture each run (a test hook).
+        let seed = UserDefaults.standard.integer(forKey: "seed")
+        engine = seed > 0 ? SandEngine(device: device, w: grid.w, h: grid.h, seed: UInt32(seed))
+            : SandEngine(device: device, w: grid.w, h: grid.h)
         let t1 = CACurrentMediaTime()
         renderer = try SandRenderer(engine: engine, device: device, scale: grid.scale)
+        if !UserDefaults.standard.bool(forKey: "paintedSand"),
+           let s = try? SurfaceKernel(device: device, w: grid.w, h: grid.h, W: engine.W, scale: grid.scale) {
+            surface = s
+            renderer.kernel.highlights = 0
+            renderer.encodeExtra = { cb, g, changed in s.encode(cb, grid: g, gridChanged: changed) }
+        } else {
+            surface = nil
+        }
         let t2 = CACurrentMediaTime()
         gridAspect = Double(grid.w) / Double(grid.h)
         model = FrameModel(gridAspect: gridAspect, sandTexture: renderer.resource)
@@ -149,6 +164,7 @@ final class SceneController {
         renderer.backdrop = dark ? 0.13 : 0.9
         world.addChild(backdrop)
 
+        if let surface { model.useLitSand(surface.sandMaterial(colour: renderer.resource)) }
         if let env = await Self.studioLight() {
             var ibl = ImageBasedLightComponent(source: .single(env), intensityExponent: 1.0)
             ibl.inheritsRotation = true

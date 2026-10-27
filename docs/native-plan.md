@@ -170,6 +170,17 @@ After Phase 0, phases 1 and 2 depend only on the core's C ABI and can run in par
 - Frame times, thermals and memory on the device, and whether `replace` ever waits there (the log counts it). Volume clipping while the toy is held outside its volume.
 - Whether the volume keeps its true size as you move away (volumes default to fixed scale; `.defaultWorldScaling` would set it explicitly).
 
+## iPhone polish as built
+
+What Phase 2 deferred, now in the iPhone app:
+- **Drag to turn** (src/app.js's phi): a sideways drag turns the whole toy about its axle, following the finger's angle around the axle's point on screen; on release it rocks back upright (decays at 3.5/s). Gravity in grid space turns with the toy, then by the flip, as on the web. A vertical drag still flips by hand, a tap flips.
+- **Hint:** "Tap to flip · drag to turn · tilt to pour" over the picture until the first touch or Flip, then it fades (UserDefaults `sand.hinted`; `-hint 1` shows it again).
+- **Glitter and air rims from the scene's light,** as on Vision Pro: `SurfaceKernel` moved into SandKit (unchanged), and the sand layer is a lit two-faced PBR surface (`FrameModel.useLitSand`) under the bundled studio light, with `ColourKernel.highlights` 0. Side by side with the painted look on one seed: the same colours and brightness, glitter as dense and bright, and the air pockets gain a silvery meniscus edge. The back face is lit correctly at 180°. Flakes flash as the studio light turns with the phone's tilt (or the toy's turn); in the simulator, with no tilt, they hold still, where the painted twinkle ran on a clock. `-paintedSand 1` keeps the painted look for comparison.
+- **Not ported:** new sand (R) has no phone gesture; it's the tuning panel's New sand, as on the web. A second finger cancelling a drag (web) isn't ported: SwiftUI's drag is single-touch.
+- **The `EnvironmentResource` warning** stays: it's RealityKit's, logged even with `skyboxMode: .preserve`, and the log shows a second image-based light that isn't ours; `ImageBasedLightResource` isn't public in the iOS 27.1 SDK.
+- **Hooks:** `-holdTurn <deg>` (a pretend hand holds the toy turned, through the drag's handlers), `-seed <n>`, `-hint 1`, `-paintedSand 1`. Checked: `-holdTurn 30` sends g = (0.50, 0.87) = (sin 30°, cos 30°), and the sand piles in the lowest corner; flips unchanged; 60 fps.
+- **Device checks:** in `docs/device-checklist.md`: the turn by finger, its spring back, and glitter flashing as you tilt.
+
 ## Working in Claude Code
 
 - Fresh session per phase or sub-step, briefed from this file. Don't extend one long thread.

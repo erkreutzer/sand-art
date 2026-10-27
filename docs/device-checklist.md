@@ -17,6 +17,9 @@ The test hooks work on a device too: `xcrun devicectl device process launch --de
 - [ ] Tilting the phone moves the sand the way gravity would: tip it left, sand slides left; lay it flat, sand stops falling and rests on the back pane.
 - [ ] Tap flips the frame; the hanging sand lands and the rest pours.
 - [ ] The reflections in the glass turn as you tilt.
+- [ ] Glitter flakes flash as you tilt the phone (lit by the studio light, not a clock); air pockets show a silvery edge.
+- [ ] A sideways drag turns the whole toy with your finger; let go and it rocks back upright. Sand runs to the low side while it's turned.
+- [ ] The hint shows on first launch and fades after the first tap.
 - [ ] Palette picker, Tuning button, sliders and the sheet's dismissal respond to touch.
 - [ ] Turning to landscape and back keeps the same sand (no reseed, no stretch).
 - [ ] Frame time in Console stays near 16 ms (60 fps), and the phone doesn't get hot after five minutes.

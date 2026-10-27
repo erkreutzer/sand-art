@@ -18,19 +18,7 @@ enum VolumeLook {
         // reflect the room (SurfaceKernel). The texture's alpha keeps the
         // clear liquid see-through. Seen from behind it shows its back,
         // mirrored, with its own normal, so it is lit as a real layer.
-        var sand = PhysicallyBasedMaterial()
-        sand.baseColor = .init(tint: .white, texture: .init(sandTexture))
-        sand.normal = .init(texture: .init(surface.normalResource))
-        sand.metallic = .init(scale: 1, texture: .init(surface.metallicResource))
-        sand.roughness = .init(scale: 1, texture: .init(surface.roughnessResource))
-        sand.blending = .transparent(opacity: 1.0)
-        sand.faceCulling = .back
-        let L = model.layout
-        if let mesh = try? twoSidedPlane(width: Float(L.iw), height: Float(L.ih)) {
-            model.sand.model = ModelComponent(mesh: mesh, materials: [sand])
-        } else {
-            model.sand.model?.materials = [sand]
-        }
+        model.useLitSand(surface.sandMaterial(colour: sandTexture))
 
         if let glass = await glassMaterial() {
             for p in model.panes { p.model?.materials = [glass] }
@@ -44,25 +32,6 @@ enum VolumeLook {
             if e === model.sand || model.panes.contains(where: { $0 === e }) { continue }
             e.components.set(GroundingShadowComponent(castsShadow: true))
         }
-    }
-
-    /// The sand layer as two faces back to back, sharing the texture: the
-    /// back face's normal points out of the back and its texture reads
-    /// mirrored, as the back of a real sand layer does.
-    static func twoSidedPlane(width: Float, height: Float) throws -> MeshResource {
-        let x = width / 2, y = height / 2
-        let corners: [SIMD3<Float>] = [[-x, -y, 0], [x, -y, 0], [x, y, 0], [-x, y, 0]]
-        let uv: [SIMD2<Float>] = [[0, 0], [1, 0], [1, 1], [0, 1]]
-        var d = MeshDescriptor(name: "sand")
-        d.positions = MeshBuffers.Positions(corners + corners)
-        d.normals = MeshBuffers.Normals(Array(repeating: [0, 0, 1], count: 4) + Array(repeating: [0, 0, -1], count: 4))
-        d.textureCoordinates = MeshBuffers.TextureCoordinates(uv + uv)
-        // u along x, v along y on both faces (normal maps lean the same way
-        // in the layer, whichever side it's seen from).
-        d.tangents = MeshBuffers.Tangents(Array(repeating: [1, 0, 0], count: 8))
-        d.bitangents = MeshBuffers.Tangents(Array(repeating: [0, 1, 0], count: 8))
-        d.primitives = .triangles([0, 1, 2, 0, 2, 3, 4, 6, 5, 4, 7, 6])
-        return try MeshResource.generate(from: [d])
     }
 
     /// Clear soda-lime glass. A pane mirrors about 8% of the light near

@@ -1,3 +1,4 @@
+#if os(iOS) || os(visionOS)
 import Metal
 import RealityKit
 
@@ -20,16 +21,16 @@ import RealityKit
 ///   bubble. That part is a mirror; the rest a smooth water surface.
 /// - Sand grains and the clear liquid: matte, facing out.
 @MainActor
-final class SurfaceKernel {
-    let normal: LowLevelTexture, metallic: LowLevelTexture, roughness: LowLevelTexture
-    let normalResource: TextureResource, metallicResource: TextureResource, roughnessResource: TextureResource
+public final class SurfaceKernel {
+    public let normal: LowLevelTexture, metallic: LowLevelTexture, roughness: LowLevelTexture
+    public let normalResource: TextureResource, metallicResource: TextureResource, roughnessResource: TextureResource
 
     private let pipeline: MTLComputePipelineState
     private var uniforms: SIMD4<UInt32>
     private var drawn = false
 
     /// w x h grains, W the padded grid width, scale texels per grain.
-    init(device: MTLDevice, w: Int, h: Int, W: Int, scale: Int) throws {
+    public init(device: MTLDevice, w: Int, h: Int, W: Int, scale: Int) throws {
         let lib = try device.makeLibrary(source: Self.source, options: nil)
         pipeline = try device.makeComputePipelineState(function: lib.makeFunction(name: "sandSurface")!)
         uniforms = SIMD4(UInt32(w), UInt32(h), UInt32(W), UInt32(scale))
@@ -48,8 +49,21 @@ final class SurfaceKernel {
         roughnessResource = try TextureResource(from: roughness)
     }
 
+    /// The sand layer's material: the colour texture lit by the scene, with
+    /// these maps. The colour's alpha keeps the clear liquid see-through.
+    public func sandMaterial(colour: TextureResource) -> PhysicallyBasedMaterial {
+        var m = PhysicallyBasedMaterial()
+        m.baseColor = .init(tint: .white, texture: .init(colour))
+        m.normal = .init(texture: .init(normalResource))
+        m.metallic = .init(scale: 1, texture: .init(metallicResource))
+        m.roughness = .init(scale: 1, texture: .init(roughnessResource))
+        m.blending = .transparent(opacity: 1.0)
+        m.faceCulling = .back
+        return m
+    }
+
     /// For SandRenderer.encodeExtra: redraws the maps when the grid changed.
-    func encode(_ cb: MTLCommandBuffer, grid: MTLBuffer, gridChanged: Bool) {
+    public func encode(_ cb: MTLCommandBuffer, grid: MTLBuffer, gridChanged: Bool) {
         guard gridChanged || !drawn else { return }
         drawn = true
         let outs = [normal.replace(using: cb), metallic.replace(using: cb), roughness.replace(using: cb)]
@@ -135,3 +149,4 @@ final class SurfaceKernel {
     }
     """
 }
+#endif
