@@ -11,19 +11,20 @@ One simulation core shared by every surface; thin platform shells for input and 
 ## Architecture
 
 ```
-core/            Rust crate: sim, fluid, seed, engine timing; params.json, palettes.json
+core/            Rust crate: sim, fluid, seed, engine timing; params.json, palettes.json, include/sand.h
   → wasm         web: worker.js calls it; grid memory goes straight to texSubImage2D
   → C ABI        Apple: xcframework, wrapped by SandKit
 web/             today's index.html, style.css, src/ (app, render, worker, debug)
 apple/
-  SandKit/       Swift package: core bridge, Metal grid→colour kernel, gravity, palettes
-  SandArt        one multiplatform Xcode project: iOS + visionOS targets
-tools/compare/   headless scenario runner: any two versions (git refs: JS physics before 1c, wasm after)
+  SandKit/       Swift package: core bridge, engine thread, Metal grid→colour kernel, frame model, gravity, palettes
+  SandArt/       the iPhone app's sources; project.yml (XcodeGen) → SandArt.xcodeproj, iOS now, visionOS target in Phase 4
+tools/compare/   headless scenario runner: any two versions (git refs: JS physics before 1c, wasm after);
+                 kernel.html: the Metal colour kernel against the WebGL shader
 ```
 
 **Why Rust:** clean targets for both wasm (wasm-bindgen) and a static library for Swift; the sim is packed-integer arrays and tight loops, so it ports almost line for line. Rejected: keeping JS on Apple (an app's embedded JavaScriptCore has no JIT, so it's far too slow), a web view on visionOS (no RealityKit glass), Swift→wasm (less mature toolchain).
 
-**Core API** (hand-written C ABI, no UniFFI, so the grid is shared without copying; `core/src/lib.rs`, prefixed `sand_`, each documented there):
+**Core API** (hand-written C ABI, no UniFFI, so the grid is shared without copying; `core/src/lib.rs`, prefixed `sand_`, each documented there; the C header for Apple is `core/include/sand.h`, kept in step by hand):
 `new(w, h, tps, seed)`, `free`, `reseed(upsideDown)`, `tune(json, len) → values applied | -1` (the "Copy settings" shape; `render` is the host's and skipped), `frame(dt, gx, gy, maxTicks) → ticks` + `moves()`, `grid_ptr()` / `grid_width()` / `grid_height()` (RGBA8, W×H×4, layout as in `core/src/sim.rs`), `take_dirty() → first << 16 | last`, `flow() → *SandFlow` (u, v, solid pointers + nx, ny, fs), `snapshot() → len` + `snapshot_ptr()`, `restore(bytes, len) → 1 | 0`, and `alloc` / `dealloc` for hosts that have to copy bytes in (wasm).
 The core has no clock: the host measures time per tick and passes `maxTicks` (on the web, `BUDGET_MS` in `src/engine.js`). In wasm, any call that allocates (`new`, `snapshot`, `restore`, `alloc`) can grow memory, so hosts renew their views of it afterwards.
 Snapshots (`core/src/snapshot.rs`) hold the picture in motion: grains, liquid, awake chunks, random states and frame timing, so a restored engine carries on bit for bit. Tuning and the tick rate are host settings and stay out; a snapshot only restores onto the same grid size.
@@ -75,12 +76,38 @@ AR on iPhone (place on a table; fake refraction by sampling the camera feed, whi
    - a. Finish the C ABI: `tune`, `flow`, `snapshot`/`restore`. Done: `run.mjs . rust --tune <json|file>` tunes both versions (then draws a new picture, so seed settings count) and gives identical grids and liquid flow fields; `cargo test` checks that a restored engine carries on bit for bit.
    - b. `?core=wasm`: `src/engine.js` is the host (renderer + time budget) over a core with the C ABI's shape: `core-js.js` (the JS physics) or `core-wasm.js` (`src/sand_core.wasm`, committed, rebuilt by `tools/build-core.sh`). The grid is uploaded with `texSubImage2D` straight from a view on wasm memory. The budget now times the whole core frame (ticks + the once-per-frame liquid step) per tick, where it used to time the sand ticks alone; at the default speed (under one tick per frame) it never binds. In the browser at 1298×940, the same seed: identical grids with no tick limit; physics ~2.9 ms per frame in wasm against ~3.4–3.8 ms in JS.
    - c. Done: wasm is the only core; `src/sim.js`, `fluid.js`, `seed.js`, `rng.js` and `core-js.js` are deleted. Defaults live in `core/params.json`: the core embeds it (`include_str!`, `cargo test` checks every setting is there and known) and the tuning panel fetches it. `tools/compare` runs a git ref's JS physics when it has `src/sim.js`, else its committed wasm; `run.mjs e8cfcb7 .` (the last JS) gives identical grids and liquid flow, tuned and untuned.
-2. **iOS non-AR:** SandKit, shared RealityKit scene with a virtual camera, CoreMotion gravity and tilt-driven reflections.
+2. **iOS non-AR:** SandKit, shared RealityKit scene with a virtual camera, CoreMotion gravity and tilt-driven reflections. Done (below).
 3. **iPhone Duo:** hinge, tent posture, `ArrangementView`.
 4. **visionOS volume:** room lighting, transparency over passthrough, direct manipulation.
 5. **Second generation** (above).
 
 After Phase 0, phases 1 and 2 depend only on the core's C ABI and can run in parallel worktrees.
+
+## Phase 2 as built
+
+**Core for Apple.** `tools/build-apple.sh` builds `core/` as a static library (`cargo rustc --crate-type staticlib`, Cargo.toml untouched) for iOS, iOS simulator, visionOS, visionOS simulator and macOS (arm64 only; the app's simulator builds exclude x86_64) and packs `apple/SandKit/SandCore.xcframework` with `sand.h` and a module map (`import SandCore`). It skips the work when `core/` hasn't changed since the last pack. **Not committed:** each slice carries Rust's std, about 28 MB in all, and it would churn with every core change. So it is built, not checked in: by `tools/build-ios.sh`, and by the Xcode scheme's pre-build action. SwiftPM resolves the binary target when the project opens, so after a fresh clone run `tools/build-apple.sh` once before opening Xcode.
+
+**Parity.** `swift test` in `apple/SandKit` (macOS host) replays the standard scenario through the C ABI (fresh start then two flips at 60 fps, as `tools/compare/job.mjs`) and checks grid and liquid-flow hashes against what `run.mjs` prints: 400×300 seed 3, 1000×725 seed 1, and a tuned run (all four groups). All match bit for bit; so does a snapshot/restore round trip. `run.mjs` now prints flow hashes too. Residual risk: `sin`, `atan2` and `powf` in the core come from the platform's libm (Rust's bundled libm in wasm, Apple's natively). They agree on these runs; if a run ever diverges, route those calls through the `libm` crate on every target (a build change, not a physics one).
+
+**SandKit** (iOS 18 / visionOS 2 / macOS 15; Swift 5 language mode):
+- `Core`: the C ABI, one owner thread. `SandEngine`: runs it on a serial queue, as the web worker does: the display asks for a frame, asks again only when it's done, carrying the time over (capped at 0.1 s); the host times ticks and allows `floor(11 ms / per-tick)` (the web's `BUDGET_MS`). Dirty rows are copied into a shared `MTLBuffer`; a semaphore keeps that copy and the GPU's read apart (the renderer never waits: it skips a frame instead).
+- `ColourKernel`: the `src/render.js` fragment shader as a Metal compute kernel (compiled from source at start, ~0.4 s), one thread per device pixel, same hash noise from WebGL-style frag coords. Writes `rgba16Float` linear colour. `KernelTests` + `tools/compare/kernel.html` render one picture in every palette both ways: every pixel within 1/255 (half-float rounding). The liquid's alpha is converted: browsers composite it over the page in sRGB, RealityKit blends linear light, so `liquidAlpha` is solved to give the web's result over the backdrop (without this Ember's near-black liquid came out mid-grey).
+- `SandRenderer`: kernel → `LowLevelTexture` (one texel per device pixel of the glass, as the web canvas) + mipmaps → `TextureResource`; redraws only when rows changed, the pose changed or the look did.
+- `FrameLayout` / `GridSize`: `measure()` and the grid sizing from `src/app.js` (mobile budget 520k cells, dpr capped at 3, 180 ticks/s; `timeScale` comes with the core's embedded params.json).
+- `FrameModel`: wooden rails (generated grain), two 2 mm panes 3 mm apart with the sand layer between, steel posts, pins and knobs, a wooden base; the frame turns about its axle. Sand layer: unlit, untone-mapped, double-sided (seen from behind it reads upside down, as the grid isn't rewritten), shaded by `1 - 0.35|sin θ|` as the web's `--shade`. Glass: a smooth mirror at 8% opacity, which is real glass's split (≈4% reflected at each face near normal incidence, the rest passes); a transparent dielectric would have its 4% scaled down by the opacity again. Faint green for the iron in soda-lime glass.
+- `MotionSource` (iOS): CoreMotion gravity projected on the screen plane (smoothed as the web's handler), and attitude. `Palette` / `Params`: `core/palettes.json` (moved out of `src/palettes.js`, which now fetches it) and `core/params.json`, symlinked into the package's resources.
+
+**App** (`apple/SandArt`, `apple/project.yml`): portrait only for now. A `RealityView` with `.virtual` camera at the web's CSS perspective distance (4 frame heights) and the field of view that fits the toy as the web lays it out (90% width / 80% height, nudged up 0.3 b). Backdrop: an unlit plane 1.2 frame heights behind the glass, the page's radial gradient (light or dark). Light: `studio.png` (from `tools/make-studio-ibl.swift`): a dim room with a bright window behind the viewer at eye level, since a pane facing you mirrors only a patch about 10° across straight behind you; plus a directional "window" light for the wood and steel. Both turn by the inverse of the phone's turn since launch (smoothed), so the room stays put as the phone tilts. Gravity: CoreMotion, upright where there's none (simulator), then `gy *= cos θ` as the web. Tap flips; vertical drag flips by hand and settles with the swipe's speed (src/app.js). Palette picker at the bottom (remembered). Test hooks: `-flipEvery <s>`, `-paletteEvery <s>`, and `-sand.palette <n>` (any UserDefaults key works as a launch argument). Logs a frame-time line every 2 s (`log show --info --predicate 'subsystem == "art.sand.SandArt"'`).
+
+**Verified** in the iOS 27 simulators (Apple-silicon Mac): iPhone 18 Pro, grid 428×579 at scale 2 (248k cells); sand hangs and rains down, a flip turns the frame in 3D and the hanging sand lands while the fallen sand pours; palettes change at runtime; light and dark backdrops; 60 fps, 54.0 ticks/s (= 180 × 0.3), about 1–1.7 ms per core frame. iPhone Duo (unfolded, 466×678 pt): launches, grid 490×663, 60 fps. First launch on a fresh simulator spends ~20 s compiling shaders; warm launches show the first frame in about a second. The SandKit package also builds for visionOS and the app for an iOS device (unsigned).
+
+**Not verified / deferred:**
+- Touch: the simulator panel's access grant was pending, so tap, drag-flip and the picker's tap were not driven by touch; the hooks run the same `flip()` / `setPalette` paths.
+- Motion: no sensor in the simulator, so gravity from tilt and the turning reflections are untested; check on a device (axis signs follow CoreMotion's documented frame).
+- A device run (needs a development team in Xcode), device frame times.
+- Not ported yet: turning the frame by dragging around (web), new sand (R), the hint, the tuning panel and flow overlay, landscape.
+- RealityKit logs "EnvironmentResource with no skybox texture is no longer supported. Please use ImageBasedLightResource instead" even with `skyboxMode: .preserve`; `ImageBasedLightResource` isn't public in the iOS 27.1 SDK. The light works.
+- Glitter twinkle and air rims still come from the shader's `uGlint`/`uRim` (as the web), not real lighting.
 
 ## Working in Claude Code
 

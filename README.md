@@ -29,9 +29,21 @@ Then open http://localhost:5178.
 - **Grains** (`core/src/sim.rs`): a cellular automaton over one array of 32-bit cells, one grain per device pixel where the screen allows. Each cell packs type, shade, momentum and a tick stamp, so a move is one swap. Only 32×32 chunks where something can still move are simulated, so a settled picture costs almost nothing.
 - **Air barrier**: after a flip the air rises and gathers under the sand. Surface tension keeps it in pockets about 2 mm deep, not a thin film. Sand seeps through thin parts of the barrier and pours through gaps, so streams open, close and wander, and each drains one colour band at a time.
 - **Liquid** (`core/src/fluid.rs`): a coarse incompressible fluid solver, one cell per 8×8 grains. Sinking sand drags the liquid down and bubbles lift it. Because the liquid can't compress, every falling curtain sets up a return flow, and that's where the eddies come from. Every sinking grain and rising bubble moves with the local flow plus its own sinking or rising speed.
-- **Core**: the physics is a Rust crate (`core/`), shared with the native apps planned in `docs/native-plan.md`. The web runs it as wasm (`src/sand_core.wasm`, committed; `tools/build-core.sh` rebuilds it), through `src/core-wasm.js`. `src/engine.js` hosts it and draws. The core has no clock: the host times its ticks and runs fewer of them (slow motion) rather than drop frames. It began as a JS sim (`src/sim.js`, `fluid.js`, `seed.js` in git history), which the port matches bit for bit.
+- **Core**: the physics is a Rust crate (`core/`), shared with the native apps (`apple/`, `docs/native-plan.md`). Palettes live in `core/palettes.json` for both. The web runs it as wasm (`src/sand_core.wasm`, committed; `tools/build-core.sh` rebuilds it), through `src/core-wasm.js`. `src/engine.js` hosts it and draws. The core has no clock: the host times its ticks and runs fewer of them (slow motion) rather than drop frames. It began as a JS sim (`src/sim.js`, `fluid.js`, `seed.js` in git history), which the port matches bit for bit.
 - **Threads**: `src/worker.js` runs the sim, the liquid and the WebGL drawing on an OffscreenCanvas, so the page itself only handles input and the frame's CSS animation. Without OffscreenCanvas support it falls back to running on the main thread. A flip never rewrites the grid: the frame just rests at 180° and gravity in grid space reverses.
 - **Drawing** (`src/render.js`): the grid is uploaded as an RGBA8 texture as-is, with only the rows that changed re-sent. One shader draws grains, glitter, air menisci and liquid.
+
+## iPhone app
+
+A native iPhone app (`apple/`) runs the same core as a static library, with the frame on its stand drawn by RealityKit: wood, two glass panes that reflect a room as you tilt the phone, the sand between them, and the phone's own gravity. Needs Xcode 27, Rust (`rustup target add aarch64-apple-ios aarch64-apple-ios-sim aarch64-apple-visionos aarch64-apple-visionos-sim`) and XcodeGen (`brew install xcodegen`).
+
+```bash
+tools/build-ios.sh
+```
+
+That builds the core (`tools/build-apple.sh` → `apple/SandKit/SandCore.xcframework`), generates `apple/SandArt.xcodeproj` from `apple/project.yml` and builds the app for the simulator, printing the `.app` path. To run it on a phone, open `apple/SandArt.xcodeproj`, pick your team under Signing, and run. Tap to flip, drag up or down to flip by hand, tilt to pour; the swatches at the bottom change the sand.
+
+`swift test` in `apple/SandKit` checks the native core against the web's bit for bit, and draws one picture with the Metal colour kernel for `tools/compare/kernel.html` to compare with the WebGL shader. `docs/native-plan.md` has the design.
 
 ## Tuning
 

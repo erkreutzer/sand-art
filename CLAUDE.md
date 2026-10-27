@@ -10,6 +10,11 @@ Moving sand picture simulation: coloured sand, liquid and a little air between t
 
 Work on the shared core, iPhone, iPhone Duo and Vision Pro follows `docs/native-plan.md` (architecture, phases, platform constraints). Read it before starting a phase; update it when a decision changes.
 
+- `tools/build-apple.sh`: core → `apple/SandKit/SandCore.xcframework` (not committed; skips if `core/` is unchanged). Run it once after a clone, before opening Xcode.
+- `tools/build-ios.sh [Debug|Release]`: core, `xcodegen` (`apple/project.yml`; the `.xcodeproj` isn't committed), simulator build; prints errors, then the `.app` path.
+- `swift test` in `apple/SandKit`: native core vs the web's hashes (update them from `run.mjs` after a physics change), plus the Metal kernel's output for `tools/compare/kernel.html` (open it from the static server; should be within 1/255).
+- Simulator: `xcrun simctl install booted <app>`, `xcrun simctl launch booted art.sand.SandArt -flipEvery 5 -paletteEvery 7` (test hooks; `-sand.palette N` picks one); frame times every 2 s in `xcrun simctl spawn booted log show --info --predicate 'subsystem == "art.sand.SandArt"'`.
+
 ## Physics rules
 
 - Keep the sim grounded in real physics (sand and air bubbles in slightly viscous water between glass: buoyancy, drag, surface tension). Name the physical effect before a change and keep values realistic. Never add ad-hoc rules to reproduce a target picture.
