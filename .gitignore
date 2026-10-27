@@ -5,3 +5,4 @@ apple/SandKit/SandCore.xcframework/
 apple/build/
 apple/SandKit/.build/
 .swiftpm/
+apple/SandArt.xcodeproj/

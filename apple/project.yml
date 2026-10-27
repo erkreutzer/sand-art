@@ -1,0 +1,52 @@
+# XcodeGen spec for the Apple apps: `xcodegen` in apple/ writes
+# SandArt.xcodeproj (not committed). SandKit's core comes from
+# tools/build-apple.sh, which the scheme runs before each build.
+name: SandArt
+options:
+  bundleIdPrefix: art.sand
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+packages:
+  SandKit:
+    path: SandKit
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+    # The core is built for Apple silicon only (tools/build-apple.sh).
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
+targets:
+  SandArt:
+    type: application
+    platform: iOS
+    sources:
+      - path: SandArt
+    dependencies:
+      - package: SandKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: art.sand.SandArt
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Sand Art
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UIStatusBarHidden: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+schemes:
+  SandArt:
+    build:
+      targets:
+        SandArt: all
+      preActions:
+        - name: Build the core
+          script: |
+            mkdir -p "$SRCROOT/build"
+            "$SRCROOT/../tools/build-apple.sh" > "$SRCROOT/build/core-build.log" 2>&1 || true
+          settingsTarget: SandArt
+    run:
+      config: Debug
