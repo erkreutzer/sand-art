@@ -6,3 +6,4 @@ apple/build/
 apple/SandKit/.build/
 .swiftpm/
 apple/SandArt.xcodeproj/
+apple/Local.xcconfig

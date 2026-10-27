@@ -1,0 +1,10 @@
+// Copy to Local.xcconfig (not committed), or let tools/run-device.sh write it.
+// The team ID is in Xcode → Settings → Accounts → your Apple ID → the team.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// App IDs are unique across all teams, and a Personal Team can't use one that
+// someone else registered, so device builds get a prefix of their own. Only
+// device SDKs: simulator builds keep art.sand.SandArt, which CLAUDE.md's
+// simctl commands use.
+SAND_BUNDLE_PREFIX[sdk=iphoneos*] = art.sand.abcde12345
+SAND_BUNDLE_PREFIX[sdk=xros*] = art.sand.abcde12345

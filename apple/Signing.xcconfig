@@ -1,0 +1,8 @@
+// Signing for device builds. The team (a paid team or a free Personal Team)
+// lives in Local.xcconfig, which isn't committed: tools/run-device.sh writes it
+// from the Apple ID signed in to Xcode, or copy Local.xcconfig.example.
+// Simulator builds need neither.
+CODE_SIGN_STYLE = Automatic
+SAND_BUNDLE_PREFIX = art.sand
+
+#include? "Local.xcconfig"
